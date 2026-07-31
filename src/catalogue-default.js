@@ -1,6 +1,6 @@
-// Seed catalogue. Used only when the KV `catalogue` key is empty — the
+// Seed catalogue. Used only while the KV `catalogue` key is empty — the
 // first save from /admin writes to KV and this stops being consulted.
-// Generated from the site build, prices cross-checked against checkout.
+// Generated from the site build; prices cross-checked against checkout.
 export const DEFAULT_CATALOGUE = {
   "updated": null,
   "currency": "GBP",
@@ -22,7 +22,7 @@ export const DEFAULT_CATALOGUE = {
         "Work a small amount between fingertips until pliable, then apply to dry hair from roots for volume or through lengths for definition."
       ],
       "active": true,
-      "image_key": "clay"
+      "image": "/img/product-clay.png"
     },
     {
       "slug": "sea-salt-spray",
@@ -46,7 +46,7 @@ export const DEFAULT_CATALOGUE = {
         "Spritz, scrunch and leave to air dry, or blow dry."
       ],
       "active": true,
-      "image_key": "spray"
+      "image": "/img/product-spray.png"
     },
     {
       "slug": "fibre",
@@ -66,7 +66,7 @@ export const DEFAULT_CATALOGUE = {
         "Rub a small amount between palms and apply to dry hair for texture and separation."
       ],
       "active": true,
-      "image_key": "fibre"
+      "image": "/img/product-fibre.png"
     },
     {
       "slug": "paste",
@@ -86,7 +86,7 @@ export const DEFAULT_CATALOGUE = {
         "Apply a small amount to dry hair and work through with fingers for a natural, flexible hold."
       ],
       "active": true,
-      "image_key": "paste"
+      "image": "/img/product-paste.png"
     },
     {
       "slug": "creme",
@@ -106,7 +106,7 @@ export const DEFAULT_CATALOGUE = {
         "Warm a small amount between palms and work through damp or dry hair for lightweight hold and a natural finish."
       ],
       "active": true,
-      "image_key": "creme"
+      "image": "/img/product-creme.png"
     },
     {
       "slug": "form",
@@ -128,7 +128,7 @@ export const DEFAULT_CATALOGUE = {
         "Can also be added to dry hair to refresh curls, restore moisture and add curl memory."
       ],
       "active": true,
-      "image_key": "form"
+      "image": "/img/product-form.png"
     },
     {
       "slug": "rejuvenating-shampoo",
@@ -150,7 +150,7 @@ export const DEFAULT_CATALOGUE = {
         "Gentle enough for everyday use."
       ],
       "active": true,
-      "image_key": "shampoo"
+      "image": "/img/product-shampoo.png"
     },
     {
       "slug": "elijah",
@@ -167,7 +167,7 @@ export const DEFAULT_CATALOGUE = {
       ],
       "howto": [],
       "active": true,
-      "image_key": "elijah"
+      "image": "/img/product-elijah.png"
     }
   ]
 };

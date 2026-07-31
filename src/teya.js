@@ -21,7 +21,7 @@ const API = {
 
 export const DEFAULT_SETTINGS = {
   shipping: { collect: 0, iom: 0, uk: 495, eu: 1295, row: 1895 }, // pence, TBC by Ben
-  free_delivery_over: null,
+  free_over: { uk: 4000, eu: 7500, row: 10000 },                  // pence, 0 disables
   promos: { DREWRYS10: 10, PAIRED10: 10 },
 };
 
@@ -83,7 +83,12 @@ export async function priceBasket(env, payload) {
   const pct = settings.promos[code] || 0;
   const discount = Math.round((subtotal * pct) / 100);
 
-  if (settings.free_delivery_over && subtotal - discount >= settings.free_delivery_over) shipping = 0;
+  const zone = ful === 'deliver'
+    ? (/^IM\d/i.test(String(payload.postcode || '').trim())
+        ? 'iom' : String(payload.region || 'uk').toLowerCase())
+    : 'collect';
+  const threshold = (settings.free_over || {})[zone];
+  if (threshold && subtotal - discount >= threshold) shipping = 0;
 
   return {
     items, subtotal, shipping, discount,
