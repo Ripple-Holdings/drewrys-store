@@ -25,10 +25,24 @@ export const DEFAULT_SETTINGS = {
   promos: { DREWRYS10: 10, PAIRED10: 10 },
 };
 
+/**
+ * Older saves stored `image_key` ('clay') rather than a resolved `image`
+ * path. Derive the path on read so an existing KV catalogue keeps working
+ * and the next save writes it in the current shape. Without this a save
+ * would blank every image rather than migrate it.
+ */
+function normalise(cat) {
+  const products = (cat && Array.isArray(cat.products) ? cat.products : []).map((p) => ({
+    ...p,
+    image: p.image || (p.image_key ? `/img/product-${p.image_key}.png` : ''),
+  }));
+  return { ...cat, products };
+}
+
 export async function getCatalogue(env) {
   const raw = await env.DREWRYS_KV.get('catalogue');
-  if (!raw) return DEFAULT_CATALOGUE;                 // first run, before any save
-  try { return JSON.parse(raw); } catch { return DEFAULT_CATALOGUE; }
+  if (!raw) return normalise(DEFAULT_CATALOGUE);      // first run, before any save
+  try { return normalise(JSON.parse(raw)); } catch { return normalise(DEFAULT_CATALOGUE); }
 }
 
 export async function getSettings(env) {

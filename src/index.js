@@ -239,7 +239,8 @@ async function handleAdmin(request, env, url) {
           size: String(p.size || '').slice(0, 40),
           tagline: String(p.tagline || '').slice(0, 200),
           badge: String(p.badge || '').slice(0, 40),
-          image: savedImages[p.slug] || String(p.image || ''),
+          image: savedImages[p.slug] || String(p.image || '')
+                 || (p.image_key ? `/img/product-${p.image_key}.png` : ''),
           description: String(p.description || '').slice(0, 2000),
           price_pence: Math.max(0, parseInt(p.price_pence, 10) || 0),
           ingredients: Array.isArray(p.ingredients) ? p.ingredients : [],
