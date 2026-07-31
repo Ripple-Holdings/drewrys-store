@@ -1,0 +1,37 @@
+name = "drewrys-store"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# Static assets served from ./public — img/ and shell.html.
+#
+# NOTE, deliberately: the site is public/shell.html, NOT public/index.html.
+# An index.html at the root of the assets directory wins the "/" route before
+# the Worker ever runs, which is what stopped ministry-nutrition's Worker from
+# serving its homepage. Naming it shell.html leaves "/" unclaimed, so the
+# Worker owns it and can inject the catalogue. Do not add a public/index.html
+# and do not add run_worker_first — neither is needed while this holds.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# Catalogue, stock and orders.
+[[kv_namespaces]]
+binding = "DREWRYS_KV"
+id = "7ab8ffff01814fb78607261c7111c51d"
+
+[vars]
+SHOP_NAME = "Drewrys"
+SITE_ORIGIN = "https://drewrys.store"
+TEYA_ENV = "staging"
+
+# Secrets — set these in the Cloudflare dashboard under the Worker's
+# Settings › Variables and Secrets (encrypted). Not here, and not via
+# wrangler, which isn't available on a Chromebook.
+#
+#   ADMIN_KEY             PIN for /admin
+#   TEYA_API_KEY          from Ben's Teya Business Portal
+#   TEYA_STORE_ID         GB1953MQ (the Drewrys store profile)
+#   TEYA_WEBHOOK_SECRET   captured when the webhook is created
+#   SENDGRID_API_KEY      order emails
+#   SHOP_ORDER_EMAIL      where Ben receives order notifications
+#   SHOP_FROM_EMAIL       verified SendGrid sender
