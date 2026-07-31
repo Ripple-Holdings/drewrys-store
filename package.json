@@ -1,0 +1,8 @@
+{
+  "name": "drewrys-store",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "wrangler": "^4.20.0"
+  }
+}
