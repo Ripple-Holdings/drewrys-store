@@ -13,6 +13,7 @@
  */
 
 import { DEFAULT_CATALOGUE } from './catalogue-default.js';
+import { DEFAULT_INGREDIENTS } from './ingredients.js';
 
 const API = {
   staging: 'https://api.teya.xyz',
@@ -44,6 +45,16 @@ export async function getCatalogue(env) {
   const raw = await env.DREWRYS_KV.get('catalogue');
   if (!raw) return normalise(DEFAULT_CATALOGUE);      // first run, before any save
   try { return normalise(JSON.parse(raw)); } catch { return normalise(DEFAULT_CATALOGUE); }
+}
+
+/** The ingredient library: icons and write-ups, shared across products. */
+export async function getIngredients(env) {
+  const raw = await env.DREWRYS_KV.get('ingredients');
+  if (!raw) return DEFAULT_INGREDIENTS;
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) && list.length ? list : DEFAULT_INGREDIENTS;
+  } catch { return DEFAULT_INGREDIENTS; }
 }
 
 export async function getSettings(env) {

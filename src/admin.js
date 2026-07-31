@@ -60,7 +60,7 @@ pin.addEventListener('keydown',function(e){if(e.key==='Enter')attempt(pin.value.
 var saved=sessionStorage.getItem('drw_admin_key'); if(saved) attempt(saved,true);
 </script></body></html>`;
 
-export function adminHtml(state, master) {
+export function adminHtml(state) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drewrys · Admin</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
@@ -121,6 +121,12 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .chip .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
   border-radius:99px;background:rgba(255,255,255,.28);font-size:11px;font-weight:700}
 .chip.no-icon{border-style:dashed;opacity:.72}
+.chip .cicon{width:19px;height:19px;object-fit:contain}
+.chip[aria-pressed=true] .cicon{filter:invert(1) brightness(1.7)}
+.icon-slot{flex:0 0 auto;width:46px;height:46px;border-radius:10px;background:var(--cotton-2);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.icon-slot img{width:30px;height:30px;object-fit:contain}
+.icon-slot.empty{border-style:dashed;color:var(--muted);font-size:11px;text-align:center;line-height:1.2}
 .hint{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
 .steps{counter-reset:s}
 .steprow{display:flex;gap:9px;align-items:flex-start;margin-top:8px}
@@ -174,6 +180,7 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
 </header>
 <nav>
   <button data-tab="catalogue" aria-selected="true">Catalogue</button>
+  <button data-tab="ingredients" aria-selected="false">Ingredients</button>
   <button data-tab="stock" aria-selected="false">Stock</button>
   <button data-tab="delivery" aria-selected="false">Delivery</button>
   <button data-tab="orders" aria-selected="false">Orders</button>
@@ -185,10 +192,11 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
 <div class="toast" id="toast"></div>
 <script>
 var KEY=sessionStorage.getItem('drw_admin_key')||'';
-var MASTER=${JSON.stringify(master)};
 var S=${JSON.stringify(state).replace(/</g, '\\u003c')};
 var clone=function(o){return JSON.parse(JSON.stringify(o));};
 var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
+var LIB=clone(S.ingredients||[]);
+var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
 var tab='catalogue', openCard=null;
 
@@ -212,7 +220,8 @@ function dirtyCount(){
   Object.keys(draft.stock).forEach(function(k){
     if(String(draft.stock[k])!==String(S.stock[k])) n++; });
   if(JSON.stringify(draft.settings)!==JSON.stringify(S.settings)) n++;
-  n+=Object.keys(uploads).length;
+  n+=Object.keys(uploads).length+Object.keys(iconUploads).length;
+  if(JSON.stringify(LIB)!==JSON.stringify(S.ingredients||[])) n++;
   return n;
 }
 function refreshBar(){
@@ -258,14 +267,16 @@ function render(){
           '<label>Description <span style="font-weight:400">(shown in Learn more)</span></label>'+
             '<textarea data-i="'+i+'" data-f="description">'+esc(p.description)+'</textarea>'+
           '<label>Ingredients <span style="font-weight:400">(order matters &mdash; the first one opens by default)</span></label>'+
-            '<div class="chips">'+MASTER.map(function(m){
+            '<div class="chips">'+LIB.map(function(m){
               var pos=(p.ingredients||[]).indexOf(m.name);
-              return '<button type="button" class="chip'+(m.icon?'':' no-icon')+'" data-ing="'+i+'|'+esc(m.name)+
+              var ic=iconUploads[m.slug]||m.icon;
+              return '<button type="button" class="chip'+(ic?'':' no-icon')+'" data-ing="'+i+'|'+esc(m.name)+
                 '" aria-pressed="'+(pos>=0)+'">'+(pos>=0?'<span class="n">'+(pos+1)+'</span>':'')+
+                (ic?'<img class="cicon" src="'+esc(ic)+'" alt="">':'')+
                 esc(m.name)+'</button>';
             }).join('')+'</div>'+
-            '<div class="hint">Dashed ones have no icon yet (Pistachio, Amber) so they will not '+
-            'show on the card. Tap again to remove; numbers show the order they appear in.</div>'+
+            '<div class="hint">Dashed ones have no icon yet, so they will not show on the card &mdash; '+
+            'add one on the Ingredients tab. Tap again to remove; numbers show the order they appear in.</div>'+
           '<label>How to use <span style="font-weight:400">(one step per box)</span></label>'+
             '<div class="steps">'+((p.howto||[]).map(function(st,si){
               return '<div class="steprow"><div class="num">'+(si+1)+'</div>'+
@@ -281,6 +292,40 @@ function render(){
           '<div class="check"><input type="checkbox" id="vis-'+i+'" data-i="'+i+'" data-f="active"'+
             (p.active!==false?' checked':'')+'><label for="vis-'+i+'" style="margin:0">Show on the site</label></div>'+
           '<button class="danger" data-del="'+esc(p.slug)+'">Remove this product</button>'+
+        '</div></div>';
+    });
+  }
+
+  if(tab==='ingredients'){
+    h+='<div class="note">These are shared across every product. An ingredient with no icon '+
+       'will not appear on a product card at all, so add one before using it. '+
+       'Bullets and the write-up show when a customer taps the chip in Learn more.</div>';
+    h+='<button class="addnew" id="addingredient">+ Add an ingredient</button>';
+    LIB.forEach(function(g,gi){
+      var open=(openCard==='ing:'+g.slug), ic=iconUploads[g.slug]||g.icon;
+      var done=(g.bullets&&g.bullets.length)||g.text;
+      h+='<div class="card'+(open?' open':'')+'">'+
+        '<div class="head" data-toggle="ing:'+esc(g.slug)+'">'+
+          '<div class="icon-slot'+(ic?'':' empty')+'">'+(ic?'<img src="'+esc(ic)+'" alt="">':'no icon')+'</div>'+
+          '<div class="hmeta"><b>'+esc(g.name)+'</b><span>'+
+            (done?(g.bullets||[]).length+' bullets'+(g.text?' · write-up':''):'no write-up yet')+'</span></div>'+
+          '<div class="chev">&#9654;</div></div>'+
+        '<div class="body">'+
+          '<label>Name</label><input data-g="'+gi+'" data-gf="name" value="'+esc(g.name)+'">'+
+          '<label>Icon <span style="font-weight:400">(SVG or PNG, square, line art on transparent)</span></label>'+
+          '<div class="upload"><div class="icon-slot'+(ic?'':' empty')+'">'+
+            (ic?'<img src="'+esc(ic)+'" alt="">':'none')+'</div>'+
+            '<button type="button" data-gicon="'+esc(g.slug)+'">Choose icon…</button></div>'+
+          '<label>Bullet points <span style="font-weight:400">(short, up to six)</span></label>'+
+          '<div class="steps">'+((g.bullets||[]).map(function(bt,bi){
+            return '<div class="steprow"><div class="num">&bull;</div>'+
+              '<textarea data-gb="'+gi+'|'+bi+'" style="min-height:44px">'+esc(bt)+'</textarea>'+
+              '<button type="button" class="x" data-gbdel="'+gi+'|'+bi+'">&times;</button></div>';
+          }).join('')||'<div class="hint" style="margin-top:0">No bullets yet.</div>')+'</div>'+
+          ((g.bullets||[]).length<6?'<button type="button" class="addstep" data-gbadd="'+gi+'">+ Add a bullet</button>':'')+
+          '<label>Write-up</label><textarea data-g="'+gi+'" data-gf="text" '+
+            'style="min-height:110px">'+esc(g.text||'')+'</textarea>'+
+          '<button class="danger" data-gdel="'+esc(g.slug)+'">Remove this ingredient</button>'+
         '</div></div>';
     });
   }
@@ -355,9 +400,49 @@ function render(){
 
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
-    '[data-ing],[data-stepadd],[data-stepdel],#addnew');
+    '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
+    '[data-gbadd],[data-gbdel],#addnew,#addingredient');
   if(!t) return;
 
+  if(t.id==='addingredient'){
+    var nm=prompt('Ingredient name'); if(!nm) return;
+    var sg=slugify(nm);
+    if(LIB.some(function(x){return x.slug===sg;})){ toast('That one already exists'); return; }
+    LIB.push({name:nm,slug:sg,icon:'',bullets:[],text:''});
+    openCard='ing:'+sg; render(); toast('Added. Give it an icon or it will not show.'); return;
+  }
+  if(t.dataset.gicon!==undefined){
+    var gs=t.dataset.gicon;
+    var fi=document.createElement('input'); fi.type='file';
+    fi.accept='image/svg+xml,image/png,image/webp';
+    fi.addEventListener('change',function(){
+      var file=fi.files[0]; if(!file) return;
+      if(file.size>400000){ toast('Icon is over 400KB — please shrink it'); return; }
+      var rd=new FileReader();
+      rd.onload=function(){ iconUploads[gs]=rd.result; render(); toast('Icon ready — press Save'); };
+      rd.readAsDataURL(file);
+    });
+    fi.click(); return;
+  }
+  if(t.dataset.gdel!==undefined){
+    var gg=LIB.filter(function(x){return x.slug===t.dataset.gdel;})[0];
+    var used=draft.catalogue.products.filter(function(pp){
+      return (pp.ingredients||[]).indexOf(gg.name)>=0;}).map(function(pp){return pp.name;});
+    if(used.length && !confirm('"'+gg.name+'" is used on '+used.join(', ')+
+      '. Removing it takes it off those products too. Continue?')) return;
+    if(!used.length && !confirm('Remove "'+gg.name+'"?')) return;
+    LIB=LIB.filter(function(x){return x.slug!==t.dataset.gdel;});
+    draft.catalogue.products.forEach(function(pp){
+      pp.ingredients=(pp.ingredients||[]).filter(function(n){return n!==gg.name;});});
+    delete iconUploads[t.dataset.gdel];
+    openCard=null; render(); return;
+  }
+  if(t.dataset.gbadd!==undefined){
+    var gb=LIB[+t.dataset.gbadd]; gb.bullets=(gb.bullets||[]).concat(['']); render(); return;
+  }
+  if(t.dataset.gbdel!==undefined){
+    var gd=t.dataset.gbdel.split('|'); LIB[+gd[0]].bullets.splice(+gd[1],1); render(); return;
+  }
   if(t.dataset.ing!==undefined){
     var bits=t.dataset.ing.split('|'), pr=draft.catalogue.products[+bits[0]], nm=bits[1];
     pr.ingredients=pr.ingredients||[];
@@ -430,6 +515,17 @@ document.addEventListener('input',function(e){
       head.querySelector('span').textContent='£'+pounds(p.price_pence)+(p.size?' · '+p.size:'');
     }
   }
+  if(t.dataset.g!==undefined&&t.dataset.gf){
+    var gl=LIB[+t.dataset.g], gf=t.dataset.gf;
+    if(gf==='name'){
+      var was=gl.name; gl.name=t.value;
+      draft.catalogue.products.forEach(function(pp){
+        pp.ingredients=(pp.ingredients||[]).map(function(n){return n===was?t.value:n;});});
+    } else gl[gf]=t.value;
+  }
+  if(t.dataset.gb!==undefined){
+    var gp=t.dataset.gb.split('|'); LIB[+gp[0]].bullets[+gp[1]]=t.value;
+  }
   if(t.dataset.step!==undefined){
     var sp=t.dataset.step.split('|');
     draft.catalogue.products[+sp[0]].howto[+sp[1]]=t.value;
@@ -458,7 +554,8 @@ document.querySelectorAll('nav button').forEach(function(b){
 document.getElementById('discard').addEventListener('click',function(){
   if(!confirm('Discard all unsaved changes?')) return;
   draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
-  uploads={}; render(); toast('Changes discarded');
+  LIB=clone(S.ingredients||[]); uploads={}; iconUploads={};
+  render(); toast('Changes discarded');
 });
 document.getElementById('save').addEventListener('click',async function(){
   var btn=this; btn.disabled=true; btn.textContent='Saving…';
@@ -466,13 +563,17 @@ document.getElementById('save').addEventListener('click',async function(){
     var r=await fetch('/admin',{method:'POST',
       headers:{'Content-Type':'application/json','x-admin-key':KEY},
       body:JSON.stringify({catalogue:draft.catalogue,stock:draft.stock,
-        settings:draft.settings,images:uploads})});
+        settings:draft.settings,images:uploads,
+        ingredients:LIB.map(function(g){
+          return Object.assign({},g,{icon_upload:iconUploads[g.slug]||undefined});})})});
     if(!r.ok) throw new Error('save failed');
     var res=await r.json();
     if(res.images) draft.catalogue.products.forEach(function(p){
       if(res.images[p.slug]) p.image=res.images[p.slug]; });
-    S.catalogue=clone(draft.catalogue); S.stock=clone(draft.stock); S.settings=clone(draft.settings);
-    uploads={}; render(); toast('Saved — the site is updated');
+    if(res.images&&res.images.__ingredients){ LIB=res.images.__ingredients; }
+    S.catalogue=clone(draft.catalogue); S.stock=clone(draft.stock);
+    S.settings=clone(draft.settings); S.ingredients=clone(LIB);
+    uploads={}; iconUploads={}; render(); toast('Saved — the site is updated');
   }catch(e){ toast('Save failed — nothing was changed'); }
   btn.disabled=false; btn.textContent='Save changes';
 });

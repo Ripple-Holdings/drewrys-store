@@ -14,10 +14,10 @@
 
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
-  DEFAULT_SETTINGS,
+  getIngredients, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
-import { INGREDIENT_MASTER } from './ingredients.js';
+
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -51,6 +51,7 @@ async function renderSite(request, env) {
     shipping: settings.shipping,
     free_over: settings.free_over,
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
+    ingredients: await getIngredients(env),
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
   };
 
@@ -191,7 +192,7 @@ async function recentOrders(env) {
 
 /** Uploaded product photos are stored in KV and served from /media/<slug>. */
 async function saveImage(env, slug, dataUrl) {
-  const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+  const m = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
   if (!m) return null;
   const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
   if (bytes.length > 2_000_000) return null;
@@ -207,6 +208,11 @@ async function serveImage(env, slug) {
     headers: {
       'Content-Type': (metadata && metadata.type) || 'image/png',
       'Cache-Control': 'public, max-age=31536000, immutable',
+      // Uploaded SVGs are same-origin. Loaded via <img> a browser will not run
+      // script inside one, but if anything ever fetches these directly this
+      // stops an uploaded file behaving like a page.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
@@ -253,6 +259,28 @@ async function handleAdmin(request, env, url) {
       await env.DREWRYS_KV.put('catalogue', JSON.stringify(clean));
     }
 
+    if (Array.isArray(body.ingredients)) {
+      const lib = [];
+      for (const g of body.ingredients) {
+        const slug = String(g.slug || '').slice(0, 60);
+        if (!slug) continue;
+        let icon = String(g.icon || '');
+        if (g.icon_upload) {
+          const saved = await saveImage(env, `ing-${slug}`, g.icon_upload);
+          if (saved) icon = saved;
+        }
+        lib.push({
+          name: String(g.name || '').slice(0, 60),
+          slug, icon,
+          bullets: (Array.isArray(g.bullets) ? g.bullets : [])
+            .map((b) => String(b).slice(0, 120)).filter(Boolean).slice(0, 6),
+          text: String(g.text || '').slice(0, 1200),
+        });
+      }
+      await env.DREWRYS_KV.put('ingredients', JSON.stringify(lib));
+      savedImages.__ingredients = lib;
+    }
+
     if (body.stock && typeof body.stock === 'object') {
       for (const [slug, v] of Object.entries(body.stock)) {
         if (v === null || v === '') await env.DREWRYS_KV.delete(`stock:${slug}`);
@@ -273,7 +301,8 @@ async function handleAdmin(request, env, url) {
     settings: await getSettings(env),
     stock: await stockMap(env, cat.products),
     orders: await recentOrders(env),
-  }, INGREDIENT_MASTER));
+    ingredients: await getIngredients(env),
+  }));
 }
 
 /* ── router ──────────────────────────────────────────────────────────────── */
