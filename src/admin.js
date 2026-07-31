@@ -268,6 +268,13 @@ function render(){
   if(tab==='delivery'){
     h+='<div class="note">Collection and Isle of Man delivery are always free. '+
        'Set a free-delivery threshold to 0 to turn it off for that region.</div>';
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Collection address</b><span>Shown in the bag and on the confirmation email</span></div></div>'+
+      '<div class="body"><label>Address</label>'+
+      '<input data-collect="1" value="'+esc(draft.settings.collect_address||'')+
+      '" placeholder="Drewrys, 1 Example Street, Douglas, IM1 1AA">'+
+      '<div class="note" style="margin:10px 0 0;padding:9px 11px">Separate with commas &mdash; '+
+      'each part shows on its own line.</div></div></div>';
     [['uk','United Kingdom'],['eu','Europe'],['row','Rest of world']].forEach(function(r){
       h+='<div class="card open"><div class="head" style="cursor:default">'+
         '<div class="hmeta"><b>'+r[1]+'</b><span>'+esc(r[0].toUpperCase())+'</span></div></div>'+
@@ -375,6 +382,7 @@ document.addEventListener('input',function(e){
     draft.settings.shipping[t.dataset.ship]=toPence(t.value); }
   if(t.dataset.free){ draft.settings.free_over=draft.settings.free_over||{};
     draft.settings.free_over[t.dataset.free]=toPence(t.value); }
+  if(t.dataset.collect){ draft.settings.collect_address=t.value; }
   refreshBar();
 });
 

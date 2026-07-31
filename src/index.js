@@ -49,6 +49,7 @@ async function renderSite(request, env) {
     stock: await stockMap(env, live),
     shipping: settings.shipping,
     free_over: settings.free_over,
+    collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
   };
 
@@ -119,7 +120,7 @@ function orderTable(order) {
 
 async function sendOrderEmails(env, order) {
   const collect = order.fulfilment === 'collect';
-  const addr = env.SHOP_COLLECT_ADDR || '';
+  const addr = order.collect_address || env.SHOP_COLLECT_ADDR || '';
   const cust = `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#191C21">
     <h2 style="font-weight:600">Thanks${order.customer?.name ? ', ' + esc(order.customer.name.split(' ')[0]) : ''}.</h2>
     <p>We've got your order. Reference <b>${esc(order.reference)}</b>.</p>

@@ -22,6 +22,7 @@ const API = {
 export const DEFAULT_SETTINGS = {
   shipping: { collect: 0, iom: 0, uk: 495, eu: 1295, row: 1895 }, // pence, TBC by Ben
   free_over: { uk: 4000, eu: 7500, row: 10000 },                  // pence, 0 disables
+  collect_address: '',                                            // shown in the bag and the email
   promos: { DREWRYS10: 10, PAIRED10: 10 },
 };
 
