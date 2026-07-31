@@ -100,6 +100,11 @@ section{padding-block:clamp(56px,8vw,120px)}
 
 .card .shot{position:relative;aspect-ratio:1/1;display:grid;place-items:center;padding:22px;overflow:hidden;background:#f5f2f3}
 .card .shot svg{width:100%;height:100%;filter:drop-shadow(0 18px 24px rgba(25,28,33,.14))}
+.tag--out{background:#8a3d3d!important}
+.card.is-sold .pshot{filter:grayscale(1);opacity:.45}
+.card.is-sold .pname,.card.is-sold .price{opacity:.55}
+.add--out{background:var(--line)!important;color:rgba(25,28,33,.55)!important;cursor:default}
+.plow{font-size:.76rem;font-weight:600;color:#8a5a12;margin-top:4px}
 .tag{position:absolute;top:14px;left:14px;z-index:2;font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;border-radius:30px;background:var(--slate);color:var(--cotton)}
 .tag.new{background:var(--peanut-deep)}
 .card .meta{padding:18px 20px 20px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px;flex:1}
@@ -977,15 +982,18 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
   document.getElementById('ticker').innerHTML=html;
 })();
 
-const __D__=(window.__DREWRYS__||{products:[],stock:{}});
-const PRODUCTS=__D__.products.map(function(p){return {
-  n:p.name, v:p.size, d:p.tagline, p:p.price_pence/100, tag:p.badge,
-  img:p.image_key, long:p.description, slug:p.slug,
-  stock:(__D__.stock||{})[p.slug]
-};});
+const __D__=(window.__DREWRYS__||{products:[],stock:{},shipping:{},free_over:{}});
+const PRODUCTS=__D__.products.map(function(p){
+  var st=(__D__.stock||{})[p.slug];
+  return { n:p.name, v:p.size, d:p.tagline, p:p.price_pence/100, tag:p.badge,
+           img:p.image, long:p.description, slug:p.slug,
+           stock:(st===undefined?null:st) };
+});
 const INGREDIENTS=Object.fromEntries(__D__.products.map(function(p){return [p.name,p.ingredients||[]];}));
 const HOWTO=Object.fromEntries(__D__.products.filter(function(p){return (p.howto||[]).length;})
   .map(function(p){return [p.name,p.howto];}));
+const soldOut=function(p){return p&&p.stock!==null&&p.stock<=0;};
+const lowStock=function(p){return p&&p.stock!==null&&p.stock>0&&p.stock<=5;};
 const money=n=>'£'+n.toFixed(2);
 const IMGS={"clay": "/img/product-clay.png", "spray": "/img/product-spray.png", "fibre": "/img/product-fibre.png", "paste": "/img/product-paste.png", "creme": "/img/product-creme.png", "form": "/img/product-form.png", "shampoo": "/img/product-shampoo.png", "elijah": "/img/product-elijah.png"};
 
@@ -1051,13 +1059,13 @@ document.addEventListener('mouseover',e=>{
 });
 const grid=document.getElementById('grid');
 grid.innerHTML=PRODUCTS.map((p,i)=>`
-  <article class="card" data-idx="${i}">
-    <div class="shot">${p.tag?`<span class="tag">${p.tag}</span>`:''}<img class="pshot" src="${IMGS[p.img]}" alt="${p.n}"></div>
+  <article class="card${soldOut(p)?' is-sold':''}" data-idx="${i}">
+    <div class="shot">${soldOut(p)?'<span class="tag tag--out">Sold out</span>':(p.tag?`<span class="tag">${p.tag}</span>`:'')}<img class="pshot" src="${p.img}" alt="${p.n}"></div>
     <div class="meta">
       <h3 class="pname">${p.n}</h3>
       <p class="pvol">${p.v}</p>
-      <p class="pdesc">${p.d}</p>
-      <div class="prow"><span class="price">${money(p.p)}</span><div class="pbtns"><button class="learn" type="button">Learn more</button><button class="add">Add</button></div></div>
+      <p class="pdesc">${p.d}</p>${lowStock(p)?`<p class="plow">Only ${p.stock} left</p>`:''}
+      <div class="prow"><span class="price">${money(p.p)}</span><div class="pbtns"><button class="learn" type="button">Learn more</button>${soldOut(p)?'<button class="add add--out" disabled>Sold out</button>':'<button class="add">Add</button>'}</div></div>
     </div>
   </article>`).join('');
 
@@ -1065,8 +1073,8 @@ const bagN=document.getElementById('bagN');
 function syncBadge(){ const n=cartCount(); bagN.textContent=n; bagN.style.display = n>0 ? 'grid' : 'none'; }
 const bagBtn=document.getElementById('bag');
 const noAnim=()=>reduce||typeof gsap==='undefined';
-const RATES={iom:0, uk:4.95, eu:9.95, row:14.95};
-const FREE_OVER={iom:0, uk:40, eu:75, row:100};
+const RATES=(function(sh){return {iom:(sh.iom||0)/100, uk:(sh.uk||0)/100, eu:(sh.eu||0)/100, row:(sh.row||0)/100};})(__D__.shipping||{});
+const FREE_OVER=(function(f){return {iom:0, uk:(f.uk==null?40:f.uk/100), eu:(f.eu==null?75:f.eu/100), row:(f.row==null?100:f.row/100)};})(__D__.free_over||{});
 let CART={};              // {index: qty}
 let PROMO=null;            // {code, pct}
 const PROMOS={ 'DREWRYS10':10 };   // placeholder code — swap for Ben's real ones
@@ -1117,7 +1125,7 @@ function flyToBag(card){
     .to(ghost,{rotation:22,scale:.14,duration:.88,ease:'power2.in'},0)
     .to(ghost,{opacity:0,duration:.24,ease:'power1.in'},.64);
 }
-function addToCart(i){ CART[i]=(CART[i]||0)+1; renderCart(); bumpBag(); }
+function addToCart(i){ if(soldOut(PRODUCTS[i])) return; CART[i]=(CART[i]||0)+1; renderCart(); bumpBag(); }
 function setQty(i,q){ if(q<=0) delete CART[i]; else CART[i]=q; renderCart(); syncBadge(); }
 
 function renderCart(){
@@ -1128,7 +1136,7 @@ function renderCart(){
   } else {
     body.innerHTML=keys.map(i=>{const p=PRODUCTS[i],q=CART[i];return `
       <div class="ci">
-        <img src="${IMGS[p.img]}" alt="">
+        <img src="${p.img}" alt="">
         <div class="ci-main">
           <div class="ci-n">${p.n}</div><div class="ci-v">${p.v}</div>
           <div class="ci-row">
@@ -1315,7 +1323,8 @@ renderCart();
     const list=document.getElementById('upList');
     list.innerHTML=opts.map(i=>{
       const p=PRODUCTS[i];
-      return '<li class="up-item"><div class="up-shot"><img src="'+IMGS[p.img]+'" alt="'+p.n+'"></div>'+
+      if(soldOut(p)) return '';
+      return '<li class="up-item"><div class="up-shot"><img src="'+p.img+'" alt="'+p.n+'"></div>'+
              '<div class="up-txt"><b>'+p.n+'</b><span>'+p.v+'</span><i>'+money(p.p)+'</i></div>'+
              '<button type="button" class="up-add" data-i="'+i+'">Add</button></li>';
     }).join('');
