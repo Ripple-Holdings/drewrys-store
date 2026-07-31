@@ -60,7 +60,7 @@ pin.addEventListener('keydown',function(e){if(e.key==='Enter')attempt(pin.value.
 var saved=sessionStorage.getItem('drw_admin_key'); if(saved) attempt(saved,true);
 </script></body></html>`;
 
-export function adminHtml(state) {
+export function adminHtml(state, master) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drewrys · Admin</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
@@ -114,6 +114,23 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:99px;
+  border:1px solid var(--line);background:#fff;font-size:13.5px;cursor:pointer;min-height:40px;color:var(--ink)}
+.chip[aria-pressed=true]{background:var(--olive);border-color:var(--olive);color:var(--cotton)}
+.chip .n{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;
+  border-radius:99px;background:rgba(255,255,255,.28);font-size:11px;font-weight:700}
+.chip.no-icon{border-style:dashed;opacity:.72}
+.hint{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
+.steps{counter-reset:s}
+.steprow{display:flex;gap:9px;align-items:flex-start;margin-top:8px}
+.steprow .num{flex:0 0 auto;width:28px;height:44px;display:flex;align-items:center;
+  justify-content:center;font-weight:600;color:var(--peanut);font-size:15px}
+.steprow textarea{min-height:44px}
+.steprow .x{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);background:#fff;
+  border-radius:9px;cursor:pointer;color:var(--muted);font-size:17px}
+.addstep{margin-top:9px;background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
+  padding:10px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
 .upload{display:flex;align-items:center;gap:11px;margin-top:6px}
 .upload button{background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
@@ -168,6 +185,7 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
 <div class="toast" id="toast"></div>
 <script>
 var KEY=sessionStorage.getItem('drw_admin_key')||'';
+var MASTER=${JSON.stringify(master)};
 var S=${JSON.stringify(state).replace(/</g, '\\u003c')};
 var clone=function(o){return JSON.parse(JSON.stringify(o));};
 var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
@@ -187,7 +205,8 @@ function dirtyCount(){
   now.forEach(function(p){
     var o=base.filter(function(x){return x.slug===p.slug;})[0];
     if(!o) return;
-    ['name','size','tagline','badge','description','price_pence','active','image']
+    ['name','size','tagline','badge','description','price_pence','active','image',
+     'ingredients','howto']
       .forEach(function(k){ if(JSON.stringify(p[k])!==JSON.stringify(o[k])) n++; });
   });
   Object.keys(draft.stock).forEach(function(k){
@@ -238,6 +257,24 @@ function render(){
             '<input data-i="'+i+'" data-f="tagline" value="'+esc(p.tagline)+'">'+
           '<label>Description <span style="font-weight:400">(shown in Learn more)</span></label>'+
             '<textarea data-i="'+i+'" data-f="description">'+esc(p.description)+'</textarea>'+
+          '<label>Ingredients <span style="font-weight:400">(order matters &mdash; the first one opens by default)</span></label>'+
+            '<div class="chips">'+MASTER.map(function(m){
+              var pos=(p.ingredients||[]).indexOf(m.name);
+              return '<button type="button" class="chip'+(m.icon?'':' no-icon')+'" data-ing="'+i+'|'+esc(m.name)+
+                '" aria-pressed="'+(pos>=0)+'">'+(pos>=0?'<span class="n">'+(pos+1)+'</span>':'')+
+                esc(m.name)+'</button>';
+            }).join('')+'</div>'+
+            '<div class="hint">Dashed ones have no icon yet (Pistachio, Amber) so they will not '+
+            'show on the card. Tap again to remove; numbers show the order they appear in.</div>'+
+          '<label>How to use <span style="font-weight:400">(one step per box)</span></label>'+
+            '<div class="steps">'+((p.howto||[]).map(function(st,si){
+              return '<div class="steprow"><div class="num">'+(si+1)+'</div>'+
+                '<textarea data-step="'+i+'|'+si+'">'+esc(st)+'</textarea>'+
+                '<button type="button" class="x" data-stepdel="'+i+'|'+si+'">&times;</button></div>';
+            }).join('')||'<div class="hint" style="margin-top:0">No guide yet.</div>')+'</div>'+
+            '<button type="button" class="addstep" data-stepadd="'+i+'">+ Add a step</button>'+
+            '<div class="hint">A single step shows as a plain line. Two or more are numbered '+
+            'automatically. Leave it empty for something like a candle.</div>'+
           '<label>Photo</label><div class="upload">'+
             '<div class="thumb"><img src="'+esc(imgFor(p))+'" alt=""></div>'+
             '<button type="button" data-upload="'+esc(p.slug)+'">Choose image…</button></div>'+
@@ -317,8 +354,28 @@ function render(){
 /* ── interactions ───────────────────────────────────────────────────────── */
 
 document.addEventListener('click',function(e){
-  var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],#addnew');
+  var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
+    '[data-ing],[data-stepadd],[data-stepdel],#addnew');
   if(!t) return;
+
+  if(t.dataset.ing!==undefined){
+    var bits=t.dataset.ing.split('|'), pr=draft.catalogue.products[+bits[0]], nm=bits[1];
+    pr.ingredients=pr.ingredients||[];
+    var at=pr.ingredients.indexOf(nm);
+    if(at>=0) pr.ingredients.splice(at,1); else pr.ingredients.push(nm);
+    render(); refreshBar(); return;
+  }
+  if(t.dataset.stepadd!==undefined){
+    var pa=draft.catalogue.products[+t.dataset.stepadd];
+    pa.howto=(pa.howto||[]).concat(['']); render(); refreshBar();
+    var boxes=document.querySelectorAll('[data-step^="'+t.dataset.stepadd+'|"]');
+    if(boxes.length) boxes[boxes.length-1].focus();
+    return;
+  }
+  if(t.dataset.stepdel!==undefined){
+    var sb=t.dataset.stepdel.split('|'), ps=draft.catalogue.products[+sb[0]];
+    ps.howto.splice(+sb[1],1); render(); refreshBar(); return;
+  }
 
   if(t.id==='addnew'){
     var name=prompt('Product name'); if(!name) return;
@@ -372,6 +429,10 @@ document.addEventListener('input',function(e){
       head.querySelector('b').childNodes[0].nodeValue=p.name||'Untitled';
       head.querySelector('span').textContent='£'+pounds(p.price_pence)+(p.size?' · '+p.size:'');
     }
+  }
+  if(t.dataset.step!==undefined){
+    var sp=t.dataset.step.split('|');
+    draft.catalogue.products[+sp[0]].howto[+sp[1]]=t.value;
   }
   if(t.hasAttribute('data-stock')){
     draft.stock[t.dataset.stock]= t.value===''?null:Math.max(0,parseInt(t.value,10)||0);

@@ -17,6 +17,7 @@ import {
   DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
+import { INGREDIENT_MASTER } from './ingredients.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -272,7 +273,7 @@ async function handleAdmin(request, env, url) {
     settings: await getSettings(env),
     stock: await stockMap(env, cat.products),
     orders: await recentOrders(env),
-  }));
+  }, INGREDIENT_MASTER));
 }
 
 /* ── router ──────────────────────────────────────────────────────────────── */
