@@ -18,6 +18,8 @@ import {
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
+import { lookupPostcode } from './address.js';
+import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
 
 
@@ -56,6 +58,7 @@ async function renderSite(request, env) {
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     ingredients: await getIngredients(env),
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
+    address_lookup: !!env.ADDRESS_API_KEY,
   };
 
   const inject = `<script>window.__DREWRYS__=${
@@ -66,6 +69,22 @@ async function renderSite(request, env) {
   return html(body.includes('</head>')
     ? body.replace('</head>', inject + '</head>')
     : inject + body);
+}
+
+async function renderCheckout(env) {
+  const cat = await getCatalogue(env);
+  const settings = await getSettings(env);
+  const live = cat.products.filter((p) => p.active !== false);
+  return html(checkoutHtml({
+    products: live,
+    stock: await stockMap(env, live),
+    zones: zones(settings),
+    methods: methods(settings),
+    free_over: settings.free_over || {},
+    promos: settings.promos || {},
+    collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
+    address_lookup: !!env.ADDRESS_API_KEY,
+  }));
 }
 
 /* ── orders ──────────────────────────────────────────────────────────────── */
@@ -346,6 +365,8 @@ export default {
     const path = url.pathname;
     try {
       if (path === '/' || path === '/index.html') return renderSite(request, env);
+      if (path === '/checkout') return renderCheckout(env);
+      if (path === '/api/address') return lookupPostcode(request, env, url);
       if (path === '/api/catalogue') {
         const cat = await getCatalogue(env);
         return json({ ...cat, stock: await stockMap(env, cat.products) });
