@@ -312,7 +312,22 @@ footer{background:var(--slate-2);color:var(--cream);padding-block:clamp(46px,6vw
 .pc-wrap{margin-top:12px}
 .pc-wrap label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
 .pc-wrap input,.pc-wrap select{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;background:var(--cotton);font-family:inherit;font-size:.95rem}
-.pc-wrap input{text-transform:uppercase}
+#pc{text-transform:uppercase}
+.chk{margin-top:14px}
+.chk label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.chk input,.pc-wrap input+input,#svcWrap{margin-top:8px}
+.chk input{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;background:var(--cotton);font-family:inherit;font-size:.95rem}
+.chk input:focus{outline:none;border-color:var(--peanut-deep)}
+.svcs{display:grid;gap:8px;margin-top:6px}
+.svc{display:flex;align-items:center;gap:11px;width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:12px;background:var(--cotton);cursor:pointer;text-align:left;font-family:inherit}
+.svc.sel{border-color:var(--peanut-deep);background:var(--cream)}
+.svc .dot{flex:0 0 auto;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--line);position:relative}
+.svc.sel .dot{border-color:var(--peanut-deep)}
+.svc.sel .dot:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--peanut-deep)}
+.svc .sv-n{display:block;font-weight:650;font-size:.9rem}
+.svc .sv-d{display:block;font-size:.76rem;color:var(--muted)}
+.svc .sv-p{margin-left:auto;font-weight:700;font-size:.9rem}
+.pc-note.warn{color:#8a3d3d;font-weight:650}
 .pc-wrap select{cursor:pointer}
 .pc-wrap input:focus,.pc-wrap select:focus{outline:none;border-color:var(--peanut-deep)}
 .pc-note{font-size:.78rem;margin-top:8px;color:var(--muted)}
@@ -704,29 +719,32 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
     <h4>How would you like it?</h4>
     <div class="ful-opts">
       <button class="ful-opt sel" data-ful="collect"><b>Collect in store</b><span>Free</span></button>
-      <button class="ful-opt" data-ful="deliver"><b>Delivery</b><span>Free on the Isle of Man</span></button>
+      <button class="ful-opt" data-ful="deliver"><b>Delivery</b><span id="fulDelNote">Tracked</span></button>
+    </div>
+    <div class="chk" id="chkWrap">
+      <label for="cName">Your details</label>
+      <input id="cName" type="text" placeholder="Full name" autocomplete="name">
+      <input id="cEmail" type="email" placeholder="Email address" autocomplete="email">
+      <input id="cPhone" type="tel" placeholder="Phone (optional)" autocomplete="tel">
     </div>
     <div class="collect-addr" id="collectAddr" hidden></div>
     <div class="pc-wrap" id="pcWrap" hidden>
       <label for="dest">Delivering to</label>
-      <select id="dest" hidden>
-        <option value="iom">Isle of Man</option>
-        <option value="uk">United Kingdom</option>
-        <option value="eu">Europe</option>
-        <option value="row">Rest of world</option>
-      </select>
+      <select id="dest" hidden></select>
       <div class="dd" id="destDD">
-        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-val">Isle of Man</span><svg class="dd-ch" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-        <ul class="dd-list" role="listbox" hidden>
-          <li role="option" data-v="iom" class="sel">Isle of Man</li>
-          <li role="option" data-v="uk">United Kingdom</li>
-          <li role="option" data-v="eu">Europe</li>
-          <li role="option" data-v="row">Rest of world</li>
-        </ul>
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-val"></span><svg class="dd-ch" viewBox="0 0 12 8" width="12" height="8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <ul class="dd-list" role="listbox" hidden></ul>
       </div>
-      <label for="pc" style="margin-top:12px">Postcode</label>
+      <label for="a1" style="margin-top:12px">Delivery address</label>
+      <input id="a1" type="text" placeholder="Address line 1" autocomplete="address-line1">
+      <input id="a2" type="text" placeholder="Address line 2 (optional)" autocomplete="address-line2">
+      <input id="aCity" type="text" placeholder="Town or city" autocomplete="address-level2">
       <input id="pc" type="text" placeholder="IM1 1AA" autocomplete="postal-code">
-      <p class="pc-note free" id="pcNote">Free delivery on the Isle of Man.</p>
+      <div id="svcWrap" hidden>
+        <label style="margin-top:12px">Delivery service</label>
+        <div class="svcs" id="svcs"></div>
+      </div>
+      <p class="pc-note" id="pcNote"></p>
     </div>
   </div>
   <div class="cart-foot">
@@ -923,7 +941,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
     </div>
     <div class="fl-bot">
       <span>&copy; 2026 Drewrys. All Rights Reserved.</span>
-      <a href="#" class="fl-priv">Privacy Policy</a>
+      <a href="/terms" class="fl-priv">Terms</a><a href="/returns" class="fl-priv">Returns</a><a href="/privacy" class="fl-priv">Privacy</a>
     </div>
   </div>
   <div id="flToast" hidden>We received your message, thanks</div>
@@ -1081,8 +1099,10 @@ const bagN=document.getElementById('bagN');
 function syncBadge(){ const n=cartCount(); bagN.textContent=n; bagN.style.display = n>0 ? 'grid' : 'none'; }
 const bagBtn=document.getElementById('bag');
 const noAnim=()=>reduce||typeof gsap==='undefined';
-const RATES=(function(sh){return {iom:(sh.iom||0)/100, uk:(sh.uk||0)/100, eu:(sh.eu||0)/100, row:(sh.row||0)/100};})(__D__.shipping||{});
-const FREE_OVER=(function(f){return {iom:0, uk:(f.uk==null?40:f.uk/100), eu:(f.eu==null?75:f.eu/100), row:(f.row==null?100:f.row/100)};})(__D__.free_over||{});
+const ZONES=__D__.zones||[];
+const METHODS=__D__.methods||[];
+let METHOD=null;
+const FREE_OVER=__D__.free_over||{};   /* zone -> pence, absent means none */
 let CART={};              // {index: qty}
 let PROMO=null;            // {code, pct}
 const PROMOS={ 'DREWRYS10':10 };   // placeholder code — swap for Ben's real ones
@@ -1091,16 +1111,63 @@ let FUL='collect';
 function cartCount(){ return Object.values(CART).reduce((a,c)=>a+c,0); }
 function subtotal(){ return Object.entries(CART).reduce((s,[i,q])=>s+PRODUCTS[i].p*q,0); }
 function isIOM(pc){ return /^\s*IM\d/i.test(pc||''); }
+function zoneName(id){ const z=ZONES.find(z=>z.id===id); return z?z.name:'Delivery'; }
+function methodsFor(z){ return METHODS.filter(m=>m.zone===z); }
+/* mirrors resolveZone() on the server — an IM postcode is the Isle of Man
+   whatever was picked, but claiming the Isle of Man without one is refused */
+function resolveZoneC(claimed,pc){
+  if(isIOM(pc)) return ZONES.some(z=>z.id==='iom')?{zone:'iom'}
+    :{error:'We cannot deliver to the Isle of Man at the moment.'};
+  if(claimed==='iom') return {error:'That is not an Isle of Man postcode.'};
+  if(!ZONES.some(z=>z.id===claimed)) return {error:'We cannot deliver there yet.'};
+  return {zone:claimed};
+}
+function currentZone(){
+  const d=document.getElementById('dest');
+  const pc=(document.getElementById('pc')||{}).value||'';
+  return resolveZoneC(d?d.value:'', pc.trim());
+}
+function renderServices(){
+  const wrap=document.getElementById('svcWrap'), box=document.getElementById('svcs');
+  if(!wrap) return;
+  const z=currentZone();
+  const list=z.zone?methodsFor(z.zone):[];
+  if(list.length<2){ wrap.hidden=true; box.innerHTML='';
+    METHOD=list.length===1?list[0].id:null; return; }
+  if(!list.some(m=>m.id===METHOD)) METHOD=null;
+  wrap.hidden=false;
+  box.innerHTML=list.map(m=>'<button type="button" class="svc'+(m.id===METHOD?' sel':'')+
+    '" data-svc="'+m.id+'"><span class="dot"></span><span><span class="sv-n">'+m.name+
+    '</span>'+(m.note?'<span class="sv-d">'+m.note+'</span>':'')+'</span>'+
+    '<span class="sv-p">'+money(m.price/100)+'</span></button>').join('');
+  box.querySelectorAll('[data-svc]').forEach(b=>b.addEventListener('click',()=>{
+    METHOD=b.dataset.svc; renderServices(); renderCart(); }));
+}
+/* what is still missing before this order can be placed */
+function detailsError(){
+  const v=id=>((document.getElementById(id)||{}).value||'').trim();
+  if(!v('cName')) return 'Enter your name';
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v('cEmail'))) return 'Enter a valid email';
+  if(FUL!=='deliver') return null;
+  if(!v('a1')) return 'Enter your address';
+  if(!v('aCity')) return 'Enter your town or city';
+  if(!v('pc')) return 'Enter your postcode';
+  return null;
+}
 function shipping(){
   if(FUL==='collect') return {cost:0,label:'Collection',note:'Free'};
-  const dest=document.getElementById('dest').value;
-  const pc=(document.getElementById('pc').value||'').trim();
-  const LBL={iom:'Isle of Man delivery',uk:'UK delivery',eu:'Europe delivery',row:'Worldwide delivery'};
-  if(!pc) return {cost:null,label:LBL[dest],note:'Enter postcode'};
-  if(dest==='iom') return {cost:0,label:LBL.iom,note:'Free'};
-  const thr=FREE_OVER[dest];
-  if(thr && subtotal()>=thr) return {cost:0,label:LBL[dest],note:'Free over £'+thr};
-  return {cost:RATES[dest],label:LBL[dest],note:money(RATES[dest])};
+  const pc=((document.getElementById('pc')||{}).value||'').trim();
+  if(!pc) return {cost:null,label:'Delivery',note:'Enter postcode'};
+  const z=currentZone();
+  if(z.error) return {cost:null,label:'Delivery',note:z.error};
+  const list=methodsFor(z.zone);
+  if(!list.length) return {cost:null,label:'Delivery',note:'Not available'};
+  const m=list.find(x=>x.id===METHOD)||(list.length===1?list[0]:null);
+  if(!m) return {cost:null,label:'Delivery',note:'Choose a service'};
+  const thr=FREE_OVER[z.zone];
+  if(thr && subtotal()>=thr/100)
+    return {cost:0,label:zoneName(z.zone)+' delivery',note:'Free over '+money(thr/100)};
+  return {cost:m.price/100,label:zoneName(z.zone)+' \u00b7 '+m.name,note:money(m.price/100)};
 }
 function bumpBag(){
   syncBadge();
@@ -1170,7 +1237,8 @@ function renderCart(){
   document.getElementById('tShip').textContent=sh.note;
   document.getElementById('tTotal').textContent=money(Math.max(0,sub-disc)+(sh.cost||0));
   const btn=document.getElementById('checkoutBtn');
-  btn.disabled=!keys.length || sh.cost===null;
+  const detErr=detailsError();
+  btn.disabled=!keys.length || sh.cost===null || !!detErr;
   btn.textContent=!keys.length?'Checkout':(sh.cost===null?'Enter a postcode':'Checkout &middot; '+money(sub+sh.cost));
   btn.innerHTML=btn.textContent;
 }
@@ -1206,6 +1274,7 @@ document.querySelectorAll('.ful-opt').forEach(b=>b.addEventListener('click',()=>
   b.classList.add('sel'); FUL=b.dataset.ful;
   document.getElementById('pcWrap').hidden = FUL!=='deliver';
   syncCollectAddr();
+  renderServices();
   renderCart();
 }));
 function syncCollectAddr(){
@@ -1221,16 +1290,40 @@ function syncCollectAddr(){
 }
 syncCollectAddr();
 function updateNote(){
-  const dest=document.getElementById('dest').value, note=document.getElementById('pcNote');
+  const sel=document.getElementById('dest'), note=document.getElementById('pcNote');
   const pcIn=document.getElementById('pc');
-  pcIn.placeholder = dest==='iom'?'IM1 1AA': dest==='uk'?'SW1A 1AA':'Postal code';
-  if(dest==='iom'){ note.textContent='Free delivery on the Isle of Man.'; note.classList.add('free'); }
-  else { note.textContent=LBLNOTE[dest]; note.classList.remove('free'); }
+  const z=ZONES.find(z=>z.id===(sel?sel.value:''));
+  pcIn.placeholder = z&&z.placeholder ? z.placeholder : 'Postal code';
+  renderServices();
+  const err=detailsError();
+  const sh=shipping();
+  if(err){ note.textContent=err; note.classList.add('warn'); note.classList.remove('free'); }
+  else if(sh.cost===0){ note.textContent=sh.note; note.classList.add('free'); note.classList.remove('warn'); }
+  else { note.textContent=''; note.classList.remove('warn','free'); }
   renderCart();
 }
-const LBLNOTE={uk:'UK delivery '+money(RATES.uk)+', free over £'+FREE_OVER.uk+'.',
-               eu:'Europe delivery '+money(RATES.eu)+', free over £'+FREE_OVER.eu+'.',
-               row:'Worldwide delivery '+money(RATES.row)+', free over £'+FREE_OVER.row+'.'};
+/* build the destination list from the zones the shop actually serves */
+(function(){
+  const sel=document.getElementById('dest'), dd=document.getElementById('destDD');
+  if(!sel||!dd) return;
+  sel.innerHTML=ZONES.map(z=>'<option value="'+z.id+'">'+z.name+'</option>').join('');
+  dd.querySelector('.dd-list').innerHTML=ZONES.map((z,i)=>
+    '<li role="option" data-v="'+z.id+'"'+(i===0?' class="sel"':'')+'>'+z.name+'</li>').join('');
+  const val=dd.querySelector('.dd-val');
+  if(val&&ZONES[0]) val.textContent=ZONES[0].name;
+  if(ZONES[0]) sel.value=ZONES[0].id;
+})();
+/* any change to the details re-prices and re-validates */
+['cName','cEmail','cPhone','a1','a2','aCity','pc'].forEach(function(id){
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('input',updateNote);
+});
+/* the Delivery option advertises the cheapest live service */
+(function(){
+  const n=document.getElementById('fulDelNote');
+  if(!n||!METHODS.length) return;
+  n.textContent='Tracked, from '+money(Math.min.apply(null,METHODS.map(m=>m.price))/100);
+})();
 document.getElementById('dest').addEventListener('change',updateNote);
 (function(){
   const dd=document.getElementById('destDD'); if(!dd) return;
@@ -1278,8 +1371,16 @@ document.getElementById('checkoutBtn').addEventListener('click',async function()
       body:JSON.stringify({
         lines:Object.entries(CART).map(([i,q])=>({sku:TEYA.skus[i],qty:q})),
         fulfilment:FUL,
-        region:(document.getElementById('dest')||{}).value||'uk',
+        region:(document.getElementById('dest')||{}).value||'',
+        method:METHOD||'',
+        name:(document.getElementById('cName')||{}).value||'',
+        email:(document.getElementById('cEmail')||{}).value||'',
+        phone:(document.getElementById('cPhone')||{}).value||'',
+        line1:(document.getElementById('a1')||{}).value||'',
+        line2:(document.getElementById('a2')||{}).value||'',
+        city:(document.getElementById('aCity')||{}).value||'',
         postcode:(document.getElementById('pc')||{}).value||'',
+        country:zoneName((currentZone()||{}).zone||''),
         promo:PROMO?PROMO.code:''
       })
     });
