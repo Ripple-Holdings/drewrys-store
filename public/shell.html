@@ -1034,10 +1034,7 @@ document.addEventListener('click',e=>{
   panel.hidden=false; panel.style.opacity=0;
   setTimeout(()=>{ panel.innerHTML=ingPanel(btn.dataset.ing); panel.style.opacity=1; },140);
 });
-document.addEventListener('mouseover',e=>{
-  const btn=e.target.closest('.md-ing');
-  if(btn && window.matchMedia('(hover:hover)').matches && !btn.classList.contains('sel')) btn.click();
-});
+
 const grid=document.getElementById('grid');
 grid.innerHTML=PRODUCTS.map((p,i)=>`
   <article class="card${soldOut(p)?' is-sold':''}" data-idx="${i}">
