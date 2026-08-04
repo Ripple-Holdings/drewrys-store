@@ -9,6 +9,8 @@
  * /create-session, so nothing here is trusted — the summary is a preview.
  */
 
+import { PAYMARKS } from './paymarks.js';
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -101,6 +103,7 @@ select{cursor:pointer}
 .sugg button:last-child{border-bottom:0}
 .sugg button:hover{background:var(--cotton)}
 
+.hint{font-size:.78rem;color:var(--muted);margin-top:6px}
 .msg{font-size:.84rem;margin-top:11px;color:var(--muted)}
 .msg.warn{color:#8a3d3d;font-weight:650}
 .collect{margin-top:11px;padding:13px 15px;border-radius:14px;background:var(--cotton);
@@ -112,7 +115,10 @@ select{cursor:pointer}
   display:flex;align-items:center;justify-content:center;transition:.18s}
 .pay:hover:not(:disabled){background:var(--slate-2);transform:translateY(-1px)}
 .pay:disabled{opacity:.45;cursor:default}
-.secure{text-align:center;font-size:.79rem;color:var(--muted);margin-top:12px}
+.paymarks{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:22px}
+.paymarks svg{width:55px;height:55px;display:block}
+@media(max-width:400px){.paymarks{gap:6px}.paymarks svg{width:49px;height:49px}}
+.secure{text-align:center;font-size:.79rem;color:var(--muted);margin-top:9px}
 
 .right h2{margin-top:0}
 .line{display:flex;gap:13px;align-items:center;margin-bottom:15px}
@@ -143,6 +149,7 @@ select{cursor:pointer}
   <a href="/"><img src="/img/logo-d.png" alt="Drewrys"></a>
   <h1>Checkout</h1>
   <div class="backwrap"><a class="btn" href="/">Continue shopping</a></div>
+  ${PAYMARKS}
 </div>
 
 <div class="grid" id="grid" hidden>
@@ -166,8 +173,9 @@ select{cursor:pointer}
 
     <div id="delBlock" hidden>
       <h2>Delivery address</h2>
-      <div class="f"><label for="dest">Country or region</label>
-        <select id="dest"></select></div>
+      <div class="f"><label for="dest">Country</label>
+        <select id="dest"></select>
+        <p class="hint">We deliver to the Isle of Man, the UK and Europe.</p></div>
       <div class="f"><label for="pc">Postcode</label>
         <div class="pcrow"><input id="pc" autocomplete="postal-code" placeholder="IM1 1AA">
           <button type="button" id="find" hidden>Find</button></div>
@@ -212,6 +220,7 @@ select{cursor:pointer}
 const D=${JSON.stringify(state).replace(/</g, '\\u003c')};
 const money=p=>'£'+(Number(p||0)/100).toFixed(2);
 const bySlug=Object.fromEntries(D.products.map(p=>[p.slug,p]));
+const byCode=Object.fromEntries((D.countries||[]).map(c=>[c.code,c]));
 let FUL='collect', METHOD=null, PROMO=null, LINES=[];
 
 /* the bag, as left by the shop */
@@ -236,14 +245,18 @@ function methodsFor(z){ return (D.methods||[]).filter(m=>m.zone===z); }
 function isIOM(pc){ return /^\\s*IM\\d/i.test(pc||''); }
 
 /* mirrors resolveZone() in the Worker */
+/* mirrors resolveZone() in the Worker */
 function currentZone(){
   const pc=(document.getElementById('pc').value||'').trim();
-  const claimed=document.getElementById('dest').value;
+  const code=document.getElementById('dest').value;
   if(isIOM(pc)) return (D.zones||[]).some(z=>z.id==='iom')?{zone:'iom'}
     :{error:'We cannot deliver to the Isle of Man at the moment.'};
-  if(claimed==='iom') return {error:'That is not an Isle of Man postcode.'};
-  if(!(D.zones||[]).some(z=>z.id===claimed)) return {error:'We cannot deliver there yet.'};
-  return {zone:claimed};
+  const c=byCode[code];
+  if(!c) return {error:'Choose the country it is going to'};
+  if(c.code==='IM') return {error:'That is not an Isle of Man postcode'};
+  if(!c.zone) return {error:'We do not deliver to '+c.name+' yet'};
+  if(!(D.zones||[]).some(z=>z.id===c.zone)) return {error:'We cannot deliver to '+c.name+' at the moment'};
+  return {zone:c.zone};
 }
 
 function shipping(){
@@ -321,8 +334,8 @@ function refresh(){
   document.getElementById('pay').disabled=!!p;
 
   const btn=document.getElementById('find');
-  const dest=document.getElementById('dest').value;
-  btn.hidden=!(D.address_lookup && (dest==='iom'||dest==='uk'));
+  const c=byCode[document.getElementById('dest').value];
+  btn.hidden=!(D.address_lookup && c && (c.code==='IM'||c.code==='GB'));
 }
 
 function applyPromo(silent){
@@ -339,7 +352,9 @@ function applyPromo(silent){
 function start(){
   renderLines();
   const sel=document.getElementById('dest');
-  sel.innerHTML=(D.zones||[]).map(z=>'<option value="'+z.id+'">'+esc(z.name)+'</option>').join('');
+  sel.innerHTML=(D.countries||[])
+    .map(c=>'<option value="'+c.code+'">'+esc(c.name)+'</option>').join('');
+  sel.value='IM';
   const cheapest=(D.methods||[]).reduce((a,m)=>a===null||m.price<a?m.price:a,null);
   if(cheapest!==null) document.getElementById('delFrom').textContent='Tracked, from '+money(cheapest);
 
@@ -360,7 +375,8 @@ function start(){
     document.getElementById(id).addEventListener('input',()=>{
       document.getElementById('sugg').hidden=true; renderServices(); refresh(); }));
   sel.addEventListener('change',()=>{
-    const z=(D.zones||[]).find(z=>z.id===sel.value);
+    const c=byCode[sel.value];
+    const z=c&&c.zone?(D.zones||[]).find(z=>z.id===c.zone):null;
     document.getElementById('pc').placeholder=z&&z.placeholder?z.placeholder:'Postal code';
     renderServices(); refresh();
   });
@@ -407,10 +423,9 @@ function start(){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
           lines:LINES.map(l=>({sku:l.p.slug,qty:l.qty})),
-          fulfilment:FUL, region:document.getElementById('dest').value, method:METHOD||'',
+          fulfilment:FUL, country:document.getElementById('dest').value, method:METHOD||'',
           name:v('cName'), email:v('cEmail'), phone:v('cPhone'),
           line1:v('a1'), line2:v('a2'), city:v('aCity'), postcode:v('pc'),
-          country:zoneName((currentZone()||{}).zone||''),
           promo:PROMO?PROMO.code:''
         })});
       const d=await r.json();

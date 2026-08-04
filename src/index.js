@@ -18,6 +18,7 @@ import {
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
+import { COUNTRIES } from './countries.js';
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
@@ -80,6 +81,7 @@ async function renderCheckout(env) {
     stock: await stockMap(env, live),
     zones: zones(settings),
     methods: methods(settings),
+    countries: COUNTRIES.filter((c) => c.zone),
     free_over: settings.free_over || {},
     promos: settings.promos || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',

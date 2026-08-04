@@ -11,6 +11,8 @@
  * then cancelled.
  */
 
+import { countryByCode } from './countries.js';
+
 export const DEFAULT_ZONES = [
   { id: 'iom', name: 'Isle of Man', placeholder: 'IM1 1AA', active: true },
   { id: 'uk', name: 'United Kingdom', placeholder: 'SW1A 1AA', active: true },
@@ -51,24 +53,39 @@ export function methodsForZone(settings, zoneId) {
  * The reverse — claiming the Isle of Man with a postcode that is not IM —
  * is the underpaying direction and is rejected rather than corrected.
  */
-export function resolveZone(settings, claimed, postcode) {
+export function resolveZone(settings, country, postcode) {
   const pc = String(postcode || '').trim();
   const live = zones(settings);
   const has = (id) => live.some((z) => z.id === id);
 
+  // An IM postcode is the Isle of Man whatever was picked. Cheaper for the
+  // customer, so correcting it is safe; the reverse is checked below.
   if (IOM_POSTCODE.test(pc)) {
     return has('iom')
-      ? { zone: 'iom' }
+      ? { zone: 'iom', country: 'IM' }
       : { error: 'We cannot deliver to the Isle of Man at the moment.' };
   }
-  const want = String(claimed || '').toLowerCase();
-  if (want === 'iom') {
-    return { error: 'That postcode is not an Isle of Man one. Please choose where it is going.' };
+
+  const raw = String(country || '').trim();
+  const c = countryByCode[raw.toUpperCase()];
+  if (!c) {
+    // A tab left open before the country list shipped still sends the old zone
+    // id. Honour it rather than stranding someone mid-order.
+    const asZone = raw.toLowerCase();
+    if (asZone && has(asZone)) return { zone: asZone, country: null };
+    return { error: 'Please choose the country it is going to.' };
   }
-  if (!has(want)) {
-    return { error: 'We cannot deliver there yet. Collection in store is still available.' };
+
+  if (c.code === 'IM') {
+    return { error: 'That postcode is not an Isle of Man one. Please check it.' };
   }
-  return { zone: want };
+  if (!c.zone) {
+    return { error: `We cannot deliver to ${c.name} yet. Collection in store is still available.` };
+  }
+  if (!has(c.zone)) {
+    return { error: `We cannot deliver to ${c.name} at the moment.` };
+  }
+  return { zone: c.zone, country: c.code };
 }
 
 /** Pick and validate the service. Returns { method } or { error }. */

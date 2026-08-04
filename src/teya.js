@@ -15,6 +15,7 @@
 import { DEFAULT_CATALOGUE } from './catalogue-default.js';
 import { DEFAULT_INGREDIENTS } from './ingredients.js';
 import { DEFAULT_ZONES, DEFAULT_METHODS, resolveZone, resolveMethod } from './shipping.js';
+import { countryByCode } from './countries.js';
 
 const API = {
   staging: 'https://api.teya.xyz',
@@ -105,12 +106,16 @@ export async function priceBasket(env, payload) {
 
   let shipping = 0;
   let zone = 'collect';
+  let country = null;
   let method = null;
 
   if (ful === 'deliver') {
-    const z = resolveZone(settings, payload.region, payload.postcode);
+    // `country` is the ISO code now; `region` is the old zone id, kept so an
+    // older cached page cannot fail silently mid-order.
+    const z = resolveZone(settings, payload.country || payload.region, payload.postcode);
     if (z.error) throw new Error(z.error);
     zone = z.zone;
+    country = z.country;
 
     const m = resolveMethod(settings, zone, payload.method);
     if (m.error) throw new Error(m.error);
@@ -127,6 +132,7 @@ export async function priceBasket(env, payload) {
     promo: pct ? code : null,
     fulfilment: ful,
     zone,
+    country: country ? (countryByCode[country] || {}).name || country : null,
     method: method ? { id: method.id, name: method.name, zone: method.zone } : null,
     total: subtotal - discount + shipping,
   };
@@ -148,7 +154,8 @@ export function readCustomer(payload, fulfilment) {
     line2: clean(payload.line2, 160),
     city: clean(payload.city, 80),
     postcode: clean(payload.postcode, 12).toUpperCase(),
-    country: clean(payload.country, 60),
+    country: (countryByCode[String(payload.country || '').toUpperCase()] || {}).name
+             || clean(payload.country, 60),
   };
   value.address = [value.line1, value.line2, value.city, value.postcode, value.country]
     .filter(Boolean).join(', ');
