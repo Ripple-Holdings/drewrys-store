@@ -36,18 +36,29 @@ img{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
-/* masthead: centred mark, title, and a proper site button */
-.top{padding:26px 24px 0;text-align:center}
-.top img{height:52px;width:auto;margin:0 auto}
+/* masthead: title left with the form card, mark dead centre, button right
+   over the summary column so it is out of the way */
+.top{max-width:1180px;margin:0 auto;padding:26px 24px 0;
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:16px}
 .top h1{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.014em;
-  text-transform:uppercase;font-size:clamp(1.9rem,4vw,2.6rem);line-height:1;margin-top:14px}
+  text-transform:uppercase;font-size:clamp(1.9rem,4vw,2.6rem);line-height:1;
+  justify-self:start;margin-bottom:-2px}
+.mark{justify-self:center;text-align:center}
+.mark img{height:60px;width:auto;margin:0 auto}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;
   font-size:.82rem;letter-spacing:.02em;padding:11px 20px;border-radius:40px;
   background:var(--slate);color:var(--cotton);transition:transform .18s,background .18s}
 .btn:hover{background:var(--slate-2);transform:translateY(-1px)}
-.backwrap{margin-top:18px}
+.btn.back{justify-self:end}
+@media(max-width:900px){
+  .top{grid-template-columns:1fr auto;grid-template-areas:"mark mark" "title back";
+    row-gap:14px;padding-bottom:0}
+  .top h1{grid-area:title}
+  .mark{grid-area:mark}
+  .btn.back{grid-area:back}
+}
 
-.grid{max-width:1180px;margin:26px auto 0;display:grid;grid-template-columns:1fr 390px;
+.grid{max-width:1180px;margin:10px auto 0;display:grid;grid-template-columns:1fr 390px;
   align-items:start;gap:34px;padding:0 24px 90px}
 @media(max-width:900px){
   .grid{grid-template-columns:1fr;gap:24px;padding:0 20px 70px}
@@ -115,9 +126,15 @@ select{cursor:pointer}
   display:flex;align-items:center;justify-content:center;transition:.18s}
 .pay:hover:not(:disabled){background:var(--slate-2);transform:translateY(-1px)}
 .pay:disabled{opacity:.45;cursor:default}
-.paymarks{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:22px}
-.paymarks svg{width:55px;height:55px;display:block}
-@media(max-width:400px){.paymarks{gap:6px}.paymarks svg{width:49px;height:49px}}
+.paymarks{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:8px}
+.paymarks svg{width:59px;height:59px;display:block}
+.paymarks svg[aria-label="American Express"]{width:49.5px;height:49.5px}
+@media(max-width:620px){.paymarks{gap:6px}
+  .paymarks svg{width:48px;height:48px}
+  .paymarks svg[aria-label="American Express"]{width:40px;height:40px}}
+@media(max-width:420px){.paymarks{gap:4px}
+  .paymarks svg{width:40px;height:40px}
+  .paymarks svg[aria-label="American Express"]{width:33px;height:33px}}
 .secure{text-align:center;font-size:.79rem;color:var(--muted);margin-top:9px}
 
 .right h2{margin-top:0}
@@ -146,10 +163,12 @@ select{cursor:pointer}
 .empty{padding:70px 24px;text-align:center;color:var(--muted)}
 </style></head><body>
 <div class="top">
-  <a href="/"><img src="/img/logo-d.png" alt="Drewrys"></a>
   <h1>Checkout</h1>
-  <div class="backwrap"><a class="btn" href="/">Continue shopping</a></div>
-  ${PAYMARKS}
+  <div class="mark">
+    <a href="/"><img src="/img/logo-d.png" alt="Drewrys"></a>
+    ${PAYMARKS}
+  </div>
+  <a class="btn back" href="/">Continue shopping</a>
 </div>
 
 <div class="grid" id="grid" hidden>
