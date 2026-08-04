@@ -1149,7 +1149,7 @@ function renderCart(){
   document.getElementById('tTotal').textContent=money(Math.max(0,sub-disc));
   const btn=document.getElementById('checkoutBtn');
   btn.disabled=!keys.length;
-  btn.textContent=!keys.length?'Checkout':'Checkout \u00b7 '+money(Math.max(0,sub-disc));
+  btn.textContent='Checkout';
 }
 
 // drawer
