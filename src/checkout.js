@@ -36,15 +36,15 @@ img{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit}
 
-/* masthead: title left with the form card, mark dead centre, button right
-   over the summary column so it is out of the way */
-.top{max-width:1180px;margin:0 auto;padding:26px 24px 0;
-  display:grid;grid-template-columns:1fr auto 1fr;align-items:end;gap:16px}
-.top h1{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.014em;
-  text-transform:uppercase;font-size:clamp(1.9rem,4vw,2.6rem);line-height:1;
-  justify-self:start;margin-bottom:-2px}
-.mark{justify-self:center;text-align:center}
+/* masthead: mark centred on its own row, then the title left with the form
+   card and the button right over the summary column */
+.top{max-width:1180px;margin:0 auto;padding:26px 24px 0}
+.mark{text-align:center}
 .mark img{height:60px;width:auto;margin:0 auto}
+.toprow{display:flex;align-items:center;justify-content:space-between;
+  gap:16px;margin-top:34px}
+.top h1{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.014em;
+  text-transform:uppercase;font-size:clamp(1.9rem,4vw,2.6rem);line-height:1}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;
   font-size:.82rem;letter-spacing:.02em;padding:11px 20px;border-radius:40px;
   background:var(--slate);color:var(--cotton);transition:transform .18s,background .18s}
@@ -58,7 +58,7 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
   .btn.back{grid-area:back}
 }
 
-.grid{max-width:1180px;margin:10px auto 0;display:grid;grid-template-columns:1fr 390px;
+.grid{max-width:1180px;margin:14px auto 0;display:grid;grid-template-columns:1fr 390px;
   align-items:start;gap:34px;padding:0 24px 90px}
 @media(max-width:900px){
   .grid{grid-template-columns:1fr;gap:24px;padding:0 20px 70px}
@@ -163,12 +163,14 @@ select{cursor:pointer}
 .empty{padding:70px 24px;text-align:center;color:var(--muted)}
 </style></head><body>
 <div class="top">
-  <h1>Checkout</h1>
   <div class="mark">
-    <a href="/"><img src="/img/logo-d.png" alt="Drewrys"></a>
+    <a href="/#shop"><img src="/img/logo-d.png" alt="Drewrys"></a>
     ${PAYMARKS}
   </div>
-  <a class="btn back" href="/">Continue shopping</a>
+  <div class="toprow">
+    <h1>Checkout</h1>
+    <a class="btn back" href="/#shop">Continue shopping</a>
+  </div>
 </div>
 
 <div class="grid" id="grid" hidden>
