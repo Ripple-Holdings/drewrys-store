@@ -114,6 +114,18 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
+.ofilter{display:flex;gap:6px;margin-bottom:12px}
+.ofilter button{border:1px solid var(--line);background:#fff;color:var(--muted);
+  padding:8px 15px;border-radius:99px;font-size:13.5px;cursor:pointer;min-height:40px}
+.ofilter button.on{background:var(--ink);color:var(--cotton);border-color:var(--ink)}
+.addr{font-size:14px;line-height:1.6}
+.fulfil{margin-top:14px;width:100%;padding:13px;border:0;border-radius:11px;
+  background:var(--ink);color:var(--cotton);font-size:15px;font-weight:650;cursor:pointer;min-height:48px}
+.fulfil:disabled{opacity:.5;cursor:default}
+.doneline{margin-top:12px;padding:11px 13px;border-radius:11px;background:#e9f0e6;
+  font-size:13.5px;color:#2c5c2c}
+.ghost{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 15px;
+  border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px}
 .svcrow{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
 .svcmain{flex:1;min-width:0;display:grid;gap:6px}
 .svcp{flex:0 0 118px}
@@ -166,8 +178,9 @@ td,th{text-align:left;padding:7px 6px;border-bottom:1px solid #f0e9dc}
 th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
 .savebar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:var(--cotton);
-  padding:12px 18px;display:none;align-items:center;gap:11px}
-.savebar.on{display:flex}
+  padding:12px 18px;display:flex;align-items:center;gap:11px}
+.savebar .sp.clean{color:#9a948a}
+.savebar .disc[hidden]{display:none}
 .savebar .sp{flex:1;font-size:14px}
 .savebar button{padding:12px 20px;border-radius:10px;border:0;font-size:15px;
   font-weight:600;cursor:pointer;min-height:46px}
@@ -203,12 +216,16 @@ var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
-var tab='catalogue', openCard=null;
+var tab='catalogue', openCard=null, orderView='todo';
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
 var pounds=function(pence){return (Number(pence||0)/100).toFixed(2);};
 var toPence=function(v){return Math.round(parseFloat(String(v).replace(/[^0-9.]/g,''))*100)||0;};
+var carrierLabel=function(id){
+  var c=(S.carriers||[]).filter(function(x){return x.id===id;})[0];
+  return c?c.name:(id||'');
+};
 var slugify=function(s){return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-')
   .replace(/^-|-$/g,'').slice(0,40);};
 
@@ -231,8 +248,10 @@ function dirtyCount(){
 }
 function refreshBar(){
   var n=dirtyCount();
-  document.getElementById('savebar').className='savebar'+(n?' on':'');
-  document.getElementById('dirty').textContent=n+(n===1?' change':' changes')+' unsaved';
+  var lbl=document.getElementById('dirty');
+  lbl.textContent = n ? n+(n===1?' change':' changes')+' unsaved' : 'No unsaved changes';
+  lbl.className = 'sp'+(n?'':' clean');
+  document.getElementById('discard').hidden = !n;
 }
 function toast(m){var t=document.getElementById('toast');t.textContent=m;t.className='toast on';
   clearTimeout(window.__t); window.__t=setTimeout(function(){t.className='toast';},2200);}
@@ -394,23 +413,92 @@ function render(){
   }
 
   if(tab==='orders'){
+    var OPEN={paid:1,ready:1};
+    var pend=S.orders.filter(function(o){return OPEN[o.status];});
+    var done=S.orders.filter(function(o){return !OPEN[o.status];});
+    var list=(orderView==='done')?done:pend;
+
+    h+='<div class="ofilter">'+
+      '<button type="button" data-oview="todo"'+(orderView!=='done'?' class="on"':'')+'>'+
+        'To fulfil'+(pend.length?' ('+pend.length+')':'')+'</button>'+
+      '<button type="button" data-oview="done"'+(orderView==='done'?' class="on"':'')+'>'+
+        'Done'+(done.length?' ('+done.length+')':'')+'</button></div>';
+
     if(!S.orders.length){
-      h+='<div class="note">No paid orders yet. They appear here the moment Teya confirms payment, '+
-         'and a copy goes to your email.</div>';
+      h+='<div class="note">No paid orders yet. They appear here the moment Teya confirms '+
+         'payment, and a copy goes to your email.</div>';
+    } else if(!list.length){
+      h+='<div class="note">'+(orderView==='done'
+        ?'Nothing completed yet.':'Nothing waiting.')+'</div>';
     }
-    S.orders.forEach(function(o){
+
+    list.forEach(function(o){
+      var collect=(o.fulfilment==='collect');
+      var n=o.notified||{};
+      var badge={
+        paid: collect?'<span class="badge b-low">Needs packing</span>'
+                     :'<span class="badge b-low">Awaiting dispatch</span>',
+        ready:'<span class="badge b-low">Ready &mdash; waiting for customer</span>',
+        collected:'<span class="badge b-ok">Collected</span>',
+        dispatched:'<span class="badge b-ok">Dispatched</span>'
+      }[o.status]||'<span class="badge b-out">'+esc(o.status)+'</span>';
+
       h+='<div class="card open"><div class="head" style="cursor:default">'+
         '<div class="hmeta"><b>'+esc(o.reference)+' &middot; £'+pounds(o.total)+'</b>'+
         '<span>'+esc(String(o.settled||o.created||'').slice(0,16).replace('T',' '))+' &middot; '+
-        (o.fulfilment==='collect'?'Collection':'Delivery')+'</span></div>'+
-        '<span class="badge '+(o.status==='paid'?'b-ok':'b-out')+'">'+esc(o.status)+'</span></div>'+
-        '<div class="body"><table><tr><th>Item</th><th>Qty</th><th>Line</th></tr>'+
+        (collect?'Collection':'Delivery'+(o.method?' &middot; '+esc(o.method.name):''))+'</span></div>'+
+        badge+'</div><div class="body">'+
+        '<table><tr><th>Item</th><th>Qty</th><th>Line</th></tr>'+
         (o.items||[]).map(function(i){return '<tr><td>'+esc(i.name)+'</td><td>'+i.quantity+
           '</td><td>£'+pounds(i.unit_amount*i.quantity)+'</td></tr>';}).join('')+
-        '</table><label>Customer</label><div style="font-size:14px;line-height:1.6">'+
-        esc((o.customer||{}).name||'—')+'<br>'+esc((o.customer||{}).email||'')+'<br>'+
-        esc((o.customer||{}).phone||'')+'<br>'+esc((o.customer||{}).address||'')+' '+
-        esc((o.customer||{}).postcode||'')+'</div></div></div>';
+        '</table>'+
+        '<label>'+(collect?'Customer':'Deliver to')+'</label>'+
+        '<div class="addr">'+esc((o.customer||{}).name||'&mdash;')+'<br>'+
+        esc((o.customer||{}).email||'')+(((o.customer||{}).phone)?'<br>'+esc(o.customer.phone):'')+
+        (collect?'':'<br>'+esc((o.customer||{}).address||''))+'</div>';
+
+      if(collect){
+        if(o.status==='paid'){
+          h+='<button type="button" class="fulfil" data-act="ready" data-ref="'+esc(o.reference)+'">'+
+             'Ready for collection</button>'+
+             '<div class="hint">Emails the customer to come and get it. '+
+             'Mark it collected later, when they actually have.</div>';
+        } else if(o.status==='ready'){
+          h+='<div class="doneline">Marked ready '+esc(String(o.ready_at||'').slice(0,16).replace('T',' '))+
+            (n.ready?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
+            '<button type="button" class="fulfil" data-act="collected" data-ref="'+esc(o.reference)+'">'+
+            'Customer has collected it</button>'+
+            '<div class="hint">Closes the order. No email &mdash; they are standing in front of you.</div>'+
+            '<div class="row" style="margin-top:10px">'+
+            '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend ready email</button>'+
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+        } else {
+          h+='<div class="doneline">Collected '+esc(String(o.fulfilled||'').slice(0,16).replace('T',' '))+'</div>'+
+            '<div class="row" style="margin-top:10px">'+
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+        }
+      } else {
+        if(o.status==='paid'){
+          h+='<div class="two" style="margin-top:12px">'+
+            '<div><label>Carrier</label><select data-carrier="'+esc(o.reference)+'">'+
+              (S.carriers||[]).map(function(c){return '<option value="'+esc(c.id)+'">'+esc(c.name)+'</option>';}).join('')+
+            '</select></div>'+
+            '<div><label>Tracking number</label>'+
+              '<input data-tracking="'+esc(o.reference)+'" placeholder="Optional"></div></div>'+
+            '<button type="button" class="fulfil" data-act="dispatch" data-ref="'+esc(o.reference)+'">'+
+            'Mark as dispatched</button>'+
+            '<div class="hint">Emails the customer with the tracking link. '+
+            'Leave tracking blank if there is none &mdash; they still get told it is on its way.</div>';
+        } else {
+          h+='<div class="doneline">Dispatched '+esc(String(o.fulfilled||'').slice(0,16).replace('T',' '))+
+            (o.tracking?' &middot; '+esc(carrierLabel(o.carrier))+' '+esc(o.tracking):'')+
+            (n.dispatched?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
+            '<div class="row" style="margin-top:10px">'+
+            '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend email</button>'+
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+        }
+      }
+      h+='</div></div>';
     });
   }
 
@@ -423,8 +511,34 @@ function render(){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
-    '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],#addnew,#addingredient');
+    '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],'+
+    '[data-act],#addnew,#addingredient');
   if(!t) return;
+
+  if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; render(); return; }
+
+  if(t.dataset.act!==undefined){
+    var ref=t.dataset.ref, act=t.dataset.act;
+    if(act==='undo'&&!confirm('Step '+ref+' back one stage?')) return;
+    var payload={reference:ref,action:act};
+    var cs=document.querySelector('[data-carrier="'+ref+'"]');
+    var tr=document.querySelector('[data-tracking="'+ref+'"]');
+    if(cs) payload.carrier=cs.value;
+    if(tr) payload.tracking=tr.value.trim();
+    var was=t.textContent; t.disabled=true; t.textContent='Working…';
+    fetch('/admin',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':KEY},
+      body:JSON.stringify({order:payload})})
+      .then(function(r){ if(!r.ok) throw new Error('failed'); return r.json(); })
+      .then(function(res){
+        var i=S.orders.findIndex(function(o){return o.reference===ref;});
+        if(i>=0) S.orders[i]=res.order;
+        render();
+        toast(act==='undo' ? 'Stepped back'
+          : (res.emailed ? 'Done — customer emailed' : 'Done'));
+      })
+      .catch(function(){ t.disabled=false; t.textContent=was; toast('That did not save'); });
+    return;
+  }
 
   if(t.dataset.madd!==undefined){
     var zid=t.dataset.madd;

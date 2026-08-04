@@ -19,6 +19,7 @@ import {
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
 import { COUNTRIES } from './countries.js';
+import { CARRIERS, confirmationEmails, dispatchedEmail, readyEmail } from './fulfilment.js';
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
@@ -128,44 +129,14 @@ async function sendEmail(env, { to, subject, html: bodyHtml }) {
   return r.ok;
 }
 
-function orderRows(order) {
-  return (order.items || []).map((i) =>
-    `<tr><td style="padding:6px 0">${esc(i.name)} &times; ${i.quantity}</td>
-     <td align="right">${gbp(i.unit_amount * i.quantity)}</td></tr>`).join('');
-}
-
-function orderTable(order) {
-  return `<table style="width:100%;border-collapse:collapse;font-size:14px">
-    ${orderRows(order)}
-    <tr><td style="padding-top:10px">Subtotal</td><td align="right" style="padding-top:10px">${gbp(order.subtotal)}</td></tr>
-    ${order.discount ? `<tr><td>Discount${order.promo ? ' (' + esc(order.promo) + ')' : ''}</td><td align="right">&minus;${gbp(order.discount)}</td></tr>` : ''}
-    <tr><td>${order.fulfilment === 'collect' ? 'Collection'
-      : ('Delivery' + (order.method ? ' &mdash; ' + esc(order.method.name) : ''))}</td><td align="right">${order.shipping ? gbp(order.shipping) : 'Free'}</td></tr>
-    <tr><td style="padding-top:8px;font-weight:700">Total</td><td align="right" style="padding-top:8px;font-weight:700">${gbp(order.total)}</td></tr>
-  </table>`;
-}
-
 async function sendOrderEmails(env, order) {
-  const collect = order.fulfilment === 'collect';
-  const addr = order.collect_address || env.SHOP_COLLECT_ADDR || '';
-  const cust = `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#191C21">
-    <h2 style="font-weight:600">Thanks${order.customer?.name ? ', ' + esc(order.customer.name.split(' ')[0]) : ''}.</h2>
-    <p>We've got your order. Reference <b>${esc(order.reference)}</b>.</p>
-    ${orderTable(order)}
-    <p style="margin-top:18px">${collect
-      ? 'Ready to collect from the shop' + (addr ? ' &mdash; ' + esc(addr) : '') + '. We\'ll be in touch when it\'s ready.'
-      : 'We\'ll drop you a line when it\'s on its way.'}</p>
-    <p style="color:#6b6b6b;font-size:12px;margin-top:24px">Drewrys</p></div>`;
-
-  const owner = `<div style="font-family:system-ui,sans-serif;max-width:520px">
-    <h2>New order ${esc(order.reference)}</h2>
-    ${orderTable(order)}
-    <p style="margin-top:14px"><b>${collect ? 'COLLECTION' : 'DELIVERY'}</b><br>
-    ${esc(order.customer?.name || '')}<br>${esc(order.customer?.email || '')}<br>
-    ${esc(order.customer?.phone || '')}<br>${esc(order.customer?.address || '')} ${esc(order.customer?.postcode || '')}</p></div>`;
-
-  await sendEmail(env, { to: order.customer?.email, subject: `Drewrys order ${order.reference}`, html: cust });
-  await sendEmail(env, { to: env.SHOP_ORDER_EMAIL, subject: `New order ${order.reference} — ${gbp(order.total)}`, html: owner });
+  const settings = await getSettings(env);
+  const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
+  const { customer, owner } = confirmationEmails(order, env.SHOP_NAME, addr);
+  await sendEmail(env, { to: order.customer?.email,
+    subject: `Drewrys order ${order.reference}`, html: customer });
+  await sendEmail(env, { to: env.SHOP_ORDER_EMAIL,
+    subject: `New order ${order.reference} — ${gbp(order.total)}`, html: owner });
 }
 
 async function handleWebhook(request, env, ctx) {
@@ -219,6 +190,91 @@ async function recentOrders(env) {
   return out;
 }
 
+/**
+ * Mark an order sent (or collected), and tell the customer once.
+ *
+ * `resend` exists so a merchant can re-send deliberately; marking an order
+ * twice never re-sends by accident. `undo` clears the status AND the sent
+ * flag, so correcting a mistake and re-marking does email properly.
+ */
+/**
+ * Move an order along, and tell the customer at the right moment.
+ *
+ *   collection:  paid -> ready (emails "come and get it") -> collected (silent)
+ *   delivery:    paid -> dispatched (emails "it's on its way")
+ *
+ * Emailing on "collected" would have told someone it was ready to collect
+ * after they had already walked out with it, which is why collection has two
+ * steps rather than one.
+ *
+ * Each email sends ONCE, tracked per stage in order.notified, so re-marking
+ * never re-sends. Resend is explicit. Undo steps back one stage and clears
+ * that stage's flag so a corrected mistake does email properly.
+ */
+const STAGE_EMAIL = { ready: 'ready', dispatched: 'dispatched' };
+
+async function fulfilOrder(env, body) {
+  const ref = String(body.reference || '').slice(0, 40);
+  if (!ref) return json({ error: 'no reference' }, 400);
+
+  const raw = await env.DREWRYS_KV.get(`order:${ref}`);
+  if (!raw) return json({ error: 'order not found' }, 404);
+
+  const order = JSON.parse(raw);
+  const collect = order.fulfilment === 'collect';
+  const action = String(body.action || '');
+  order.notified = order.notified || {};
+
+  if (action === 'undo') {
+    const back = { collected: 'ready', ready: 'paid', dispatched: 'paid' };
+    const to = back[order.status];
+    if (!to) return json({ error: 'nothing to undo' }, 400);
+    if (STAGE_EMAIL[order.status]) delete order.notified[order.status];
+    if (to === 'paid') delete order.fulfilled;
+    order.status = to;
+  } else if (action === 'ready' && collect) {
+    order.status = 'ready';
+    order.ready_at = new Date().toISOString();
+  } else if (action === 'collected' && collect) {
+    order.status = 'collected';
+    order.fulfilled = new Date().toISOString();
+  } else if (action === 'dispatch' && !collect) {
+    order.carrier = String(body.carrier || '').slice(0, 30);
+    order.tracking = String(body.tracking || '').trim().slice(0, 60);
+    order.status = 'dispatched';
+    order.fulfilled = new Date().toISOString();
+  } else if (action !== 'resend') {
+    return json({ error: 'that action does not apply to this order' }, 400);
+  }
+
+  await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
+    { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+
+  const stage = STAGE_EMAIL[order.status];
+  const wants = stage && (action === 'resend' || !order.notified[stage]);
+  if (wants && order.customer?.email) {
+    const settings = await getSettings(env);
+    const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
+    const isReady = order.status === 'ready';
+    const ok = await sendEmail(env, {
+      to: order.customer.email,
+      subject: isReady
+        ? `Your Drewrys order ${ref} is ready to collect`
+        : `Your Drewrys order ${ref} is on its way`,
+      html: isReady ? readyEmail(order, env.SHOP_NAME, addr)
+                    : dispatchedEmail(order, env.SHOP_NAME),
+    });
+    if (ok) {
+      order.notified[stage] = new Date().toISOString();
+      await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
+        { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+    }
+    return json({ ok: true, order, emailed: ok });
+  }
+
+  return json({ ok: true, order, emailed: false });
+}
+
 /** Uploaded product photos are stored in KV and served from /media/<slug>. */
 async function saveImage(env, slug, dataUrl) {
   const m = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
@@ -256,6 +312,9 @@ async function handleAdmin(request, env, url) {
   if (request.method === 'POST') {
     const body = await request.json().catch(() => null);
     if (!body) return json({ error: 'bad json' }, 400);
+
+    // order actions are immediate, not part of the save-draft flow
+    if (body.order) return fulfilOrder(env, body.order);
 
     // Photos first, so the catalogue can be written with their final URLs.
     const savedImages = {};
@@ -356,6 +415,7 @@ async function handleAdmin(request, env, url) {
     stock: await stockMap(env, cat.products),
     orders: await recentOrders(env),
     ingredients: await getIngredients(env),
+    carriers: CARRIERS,
   }));
 }
 
