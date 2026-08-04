@@ -17,6 +17,8 @@ import {
   getIngredients, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
+import { zones, methods } from './shipping.js';
+import { TERMS, RETURNS, PRIVACY } from './legal.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -48,8 +50,9 @@ async function renderSite(request, env) {
   const payload = {
     products: live,
     stock: await stockMap(env, live),
-    shipping: settings.shipping,
-    free_over: settings.free_over,
+    zones: zones(settings),
+    methods: methods(settings),
+    free_over: settings.free_over || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     ingredients: await getIngredients(env),
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
@@ -115,7 +118,8 @@ function orderTable(order) {
     ${orderRows(order)}
     <tr><td style="padding-top:10px">Subtotal</td><td align="right" style="padding-top:10px">${gbp(order.subtotal)}</td></tr>
     ${order.discount ? `<tr><td>Discount${order.promo ? ' (' + esc(order.promo) + ')' : ''}</td><td align="right">&minus;${gbp(order.discount)}</td></tr>` : ''}
-    <tr><td>${order.fulfilment === 'collect' ? 'Collection' : 'Delivery'}</td><td align="right">${order.shipping ? gbp(order.shipping) : 'Free'}</td></tr>
+    <tr><td>${order.fulfilment === 'collect' ? 'Collection'
+      : ('Delivery' + (order.method ? ' &mdash; ' + esc(order.method.name) : ''))}</td><td align="right">${order.shipping ? gbp(order.shipping) : 'Free'}</td></tr>
     <tr><td style="padding-top:8px;font-weight:700">Total</td><td align="right" style="padding-top:8px;font-weight:700">${gbp(order.total)}</td></tr>
   </table>`;
 }
@@ -166,7 +170,11 @@ async function handleWebhook(request, env, ctx) {
 
   order.status = paid ? 'paid' : 'failed';
   order.settled = new Date().toISOString();
-  await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify(order));
+  // A pending checkout expires in 90 days; a PAID one is an accounting record
+  // and has to outlive that. Six years plus the current year, per the privacy
+  // policy and IoM record-keeping requirements.
+  await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify(order),
+    paid ? { expirationTtl: 60 * 60 * 24 * 365 * 7 } : undefined);
 
   if (paid) {
     await pushRecent(env, reference);
@@ -289,7 +297,32 @@ async function handleAdmin(request, env, url) {
     }
 
     if (body.settings) {
-      await env.DREWRYS_KV.put('settings', JSON.stringify({ ...DEFAULT_SETTINGS, ...body.settings }));
+      const st = body.settings;
+      const clean = {
+        ...DEFAULT_SETTINGS,
+        ...st,
+        collect_address: String(st.collect_address || '').slice(0, 300),
+        zones: (Array.isArray(st.zones) ? st.zones : DEFAULT_SETTINGS.zones)
+          .map((z) => ({
+            id: String(z.id || '').slice(0, 20),
+            name: String(z.name || '').slice(0, 60),
+            placeholder: String(z.placeholder || '').slice(0, 30),
+            active: z.active !== false,
+          })).filter((z) => z.id && z.name),
+        shipping_methods: (Array.isArray(st.shipping_methods)
+          ? st.shipping_methods : DEFAULT_SETTINGS.shipping_methods)
+          .map((m) => ({
+            id: String(m.id || '').slice(0, 40),
+            zone: String(m.zone || '').slice(0, 20),
+            name: String(m.name || '').slice(0, 60),
+            note: String(m.note || '').slice(0, 90),
+            price: Math.max(0, parseInt(m.price, 10) || 0),
+            active: m.active !== false,
+          })).filter((m) => m.id && m.zone && m.name),
+        free_over: Object.fromEntries(Object.entries(st.free_over || {})
+          .map(([k, v]) => [k, Math.max(0, parseInt(v, 10) || 0)])),
+      };
+      await env.DREWRYS_KV.put('settings', JSON.stringify(clean));
     }
 
     return json({ ok: true, images: savedImages });
@@ -319,6 +352,9 @@ export default {
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
       if (path === '/webhook' && request.method === 'POST') return handleWebhook(request, env, ctx);
+      if (path === '/terms') return html(TERMS);
+      if (path === '/returns') return html(RETURNS);
+      if (path === '/privacy') return html(PRIVACY);
       if (path === '/admin') return handleAdmin(request, env, url);
       if (path.startsWith('/media/')) return serveImage(env, decodeURIComponent(path.slice(7).split('?')[0]));
       if (env.ASSETS) return env.ASSETS.fetch(request);

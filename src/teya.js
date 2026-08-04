@@ -14,6 +14,7 @@
 
 import { DEFAULT_CATALOGUE } from './catalogue-default.js';
 import { DEFAULT_INGREDIENTS } from './ingredients.js';
+import { DEFAULT_ZONES, DEFAULT_METHODS, resolveZone, resolveMethod } from './shipping.js';
 
 const API = {
   staging: 'https://api.teya.xyz',
@@ -21,9 +22,10 @@ const API = {
 };
 
 export const DEFAULT_SETTINGS = {
-  shipping: { collect: 0, iom: 0, uk: 495, eu: 1295, row: 1895 }, // pence, TBC by Ben
-  free_over: { uk: 4000, eu: 7500, row: 10000 },                  // pence, 0 disables
-  collect_address: '',                                            // shown in the bag and the email
+  zones: DEFAULT_ZONES,
+  shipping_methods: DEFAULT_METHODS,
+  free_over: {},                    // zone id -> pence, absent or 0 = no threshold
+  collect_address: '',
   promos: { DREWRYS10: 10, PAIRED10: 10 },
 };
 
@@ -96,32 +98,71 @@ export async function priceBasket(env, payload) {
   if (!items.length) throw new Error('empty basket');
 
   const ful = payload.fulfilment === 'deliver' ? 'deliver' : 'collect';
-  let shipping = 0;
-  if (ful === 'deliver') {
-    const pc = String(payload.postcode || '').trim();
-    const region = String(payload.region || 'uk').toLowerCase();
-    shipping = /^IM\d/i.test(pc)
-      ? settings.shipping.iom
-      : (settings.shipping[region] ?? settings.shipping.uk);
-  }
 
   const code = String(payload.promo || '').toUpperCase();
   const pct = settings.promos[code] || 0;
   const discount = Math.round((subtotal * pct) / 100);
 
-  const zone = ful === 'deliver'
-    ? (/^IM\d/i.test(String(payload.postcode || '').trim())
-        ? 'iom' : String(payload.region || 'uk').toLowerCase())
-    : 'collect';
-  const threshold = (settings.free_over || {})[zone];
-  if (threshold && subtotal - discount >= threshold) shipping = 0;
+  let shipping = 0;
+  let zone = 'collect';
+  let method = null;
+
+  if (ful === 'deliver') {
+    const z = resolveZone(settings, payload.region, payload.postcode);
+    if (z.error) throw new Error(z.error);
+    zone = z.zone;
+
+    const m = resolveMethod(settings, zone, payload.method);
+    if (m.error) throw new Error(m.error);
+    method = m.method;
+    shipping = Math.max(0, parseInt(method.price, 10) || 0);
+
+    // A threshold of 0 or absent means the zone has no free-delivery offer.
+    const threshold = (settings.free_over || {})[zone];
+    if (threshold && subtotal - discount >= threshold) shipping = 0;
+  }
 
   return {
     items, subtotal, shipping, discount,
     promo: pct ? code : null,
     fulfilment: ful,
+    zone,
+    method: method ? { id: method.id, name: method.name, zone: method.zone } : null,
     total: subtotal - discount + shipping,
   };
+}
+
+const clean = (v, n) => String(v || '').trim().slice(0, n);
+
+/**
+ * Delivery needs somewhere to send it; collection still needs a way to say
+ * "it's ready". Both need an email, because that is where the confirmation
+ * and the cancellation rights go.
+ */
+export function readCustomer(payload, fulfilment) {
+  const value = {
+    name: clean(payload.name, 120),
+    email: clean(payload.email, 160),
+    phone: clean(payload.phone, 40),
+    line1: clean(payload.line1, 160),
+    line2: clean(payload.line2, 160),
+    city: clean(payload.city, 80),
+    postcode: clean(payload.postcode, 12).toUpperCase(),
+    country: clean(payload.country, 60),
+  };
+  value.address = [value.line1, value.line2, value.city, value.postcode, value.country]
+    .filter(Boolean).join(', ');
+
+  if (!value.name) return { error: 'Please give us a name for the order.' };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.email)) {
+    return { error: 'Please give us a valid email address.' };
+  }
+  if (fulfilment === 'deliver') {
+    if (!value.line1) return { error: 'Please give us a delivery address.' };
+    if (!value.city) return { error: 'Please give us a town or city.' };
+    if (!value.postcode) return { error: 'Please give us a postcode.' };
+  }
+  return { value };
 }
 
 export function newReference() {
@@ -140,6 +181,11 @@ export async function createSession(request, env) {
   try { basket = await priceBasket(env, payload); }
   catch (e) { return json({ error: String(e.message || e) }, 400); }
 
+  // Without these an order cannot be fulfilled or acknowledged, so they are
+  // checked here as well as in the browser.
+  const customer = readCustomer(payload, basket.fulfilment);
+  if (customer.error) return json({ error: customer.error }, 400);
+
   if (!env.TEYA_API_KEY || !env.TEYA_STORE_ID) {
     return json({ error: 'payments not configured' }, 503);
   }
@@ -151,13 +197,7 @@ export async function createSession(request, env) {
   await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify({
     reference, status: 'pending', created: new Date().toISOString(),
     ...basket,
-    customer: {
-      name: String(payload.name || '').slice(0, 120),
-      email: String(payload.email || '').slice(0, 160),
-      phone: String(payload.phone || '').slice(0, 40),
-      address: String(payload.address || '').slice(0, 400),
-      postcode: String(payload.postcode || '').slice(0, 12),
-    },
+    customer: customer.value,
   }), { expirationTtl: 60 * 60 * 24 * 90 });
 
   const body = {

@@ -114,6 +114,11 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
+.svcrow{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
+.svcmain{flex:1;min-width:0;display:grid;gap:6px}
+.svcp{flex:0 0 118px}
+.svcrow .x{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);background:#fff;
+  border-radius:9px;cursor:pointer;color:var(--muted);font-size:17px}
 .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:99px;
   border:1px solid var(--line);background:#fff;font-size:13.5px;cursor:pointer;min-height:40px;color:var(--ink)}
@@ -348,8 +353,9 @@ function render(){
   }
 
   if(tab==='delivery'){
-    h+='<div class="note">Collection and Isle of Man delivery are always free. '+
-       'Set a free-delivery threshold to 0 to turn it off for that region.</div>';
+    h+='<div class="note">Collection is always free. Each destination can have '+
+       'one or more services &mdash; two or more and the customer chooses. '+
+       'Turn a destination off and the site will not accept orders for it.</div>';
     h+='<div class="card open"><div class="head" style="cursor:default">'+
       '<div class="hmeta"><b>Collection address</b><span>Shown in the bag and on the confirmation email</span></div></div>'+
       '<div class="body"><label>Address</label>'+
@@ -357,18 +363,34 @@ function render(){
       '" placeholder="Drewrys, 1 Example Street, Douglas, IM1 1AA">'+
       '<div class="note" style="margin:10px 0 0;padding:9px 11px">Separate with commas &mdash; '+
       'each part shows on its own line.</div></div></div>';
-    [['uk','United Kingdom'],['eu','Europe'],['row','Rest of world']].forEach(function(r){
+
+    (draft.settings.zones||[]).forEach(function(z,zi){
+      var mine=(draft.settings.shipping_methods||[]).filter(function(m){return m.zone===z.id;});
       h+='<div class="card open"><div class="head" style="cursor:default">'+
-        '<div class="hmeta"><b>'+r[1]+'</b><span>'+esc(r[0].toUpperCase())+'</span></div></div>'+
-        '<div class="body"><div class="two">'+
-        '<div><label>Delivery charge</label><div class="money"><span>£</span>'+
-          '<input data-ship="'+r[0]+'" inputmode="decimal" value="'+
-          pounds((draft.settings.shipping||{})[r[0]])+'"></div></div>'+
-        '<div><label>Free over</label><div class="money"><span>£</span>'+
-          '<input data-free="'+r[0]+'" inputmode="decimal" value="'+
-          pounds((draft.settings.free_over||{})[r[0]])+'"></div></div>'+
-        '</div></div></div>';
+        '<div class="hmeta"><b>'+esc(z.name)+'</b><span>'+
+          (z.active===false?'not delivering here':mine.length+(mine.length===1?' service':' services'))+
+        '</span></div>'+
+        '<label class="check" style="margin:0"><input type="checkbox" data-zone="'+zi+
+          '"'+(z.active!==false?' checked':'')+'> on</label></div>'+
+        '<div class="body">';
+      mine.forEach(function(m){
+        var mi=draft.settings.shipping_methods.indexOf(m);
+        h+='<div class="svcrow">'+
+          '<div class="svcmain"><input data-m="'+mi+'" data-mf="name" value="'+esc(m.name)+'" placeholder="Service name">'+
+          '<input data-m="'+mi+'" data-mf="note" value="'+esc(m.note||'')+'" placeholder="Short description (optional)"></div>'+
+          '<div class="money svcp"><span>£</span><input data-m="'+mi+'" data-mf="price" inputmode="decimal" value="'+
+            pounds(m.price)+'"></div>'+
+          '<button type="button" class="x" data-mdel="'+mi+'">&times;</button></div>';
+      });
+      if(!mine.length) h+='<div class="hint">No service yet &mdash; nobody can order to '+esc(z.name)+'.</div>';
+      h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>'+
+        '<label>Free delivery over <span style="font-weight:400">(0 for none)</span></label>'+
+        '<div class="money" style="max-width:180px"><span>£</span><input data-free="'+esc(z.id)+
+          '" inputmode="decimal" value="'+pounds((draft.settings.free_over||{})[z.id])+'"></div>'+
+        '</div></div>';
     });
+    h+='<div class="note">Anywhere not listed above is refused at the basket with a note '+
+       'that collection is still available &mdash; better than taking an order you cannot post.</div>';
   }
 
   if(tab==='orders'){
@@ -401,9 +423,24 @@ function render(){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
-    '[data-gbadd],[data-gbdel],#addnew,#addingredient');
+    '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],#addnew,#addingredient');
   if(!t) return;
 
+  if(t.dataset.madd!==undefined){
+    var zid=t.dataset.madd;
+    var nm2=prompt('Service name, e.g. Tracked'); if(!nm2) return;
+    draft.settings.shipping_methods=draft.settings.shipping_methods||[];
+    var base=zid+'-'+slugify(nm2), id2=base, n2=2;
+    while(draft.settings.shipping_methods.some(function(m){return m.id===id2;})) id2=base+'-'+(n2++);
+    draft.settings.shipping_methods.push({id:id2,zone:zid,name:nm2,note:'',price:0,active:true});
+    render(); refreshBar(); return;
+  }
+  if(t.dataset.mdel!==undefined){
+    var m2=draft.settings.shipping_methods[+t.dataset.mdel];
+    if(!confirm('Remove "'+m2.name+'"?')) return;
+    draft.settings.shipping_methods.splice(+t.dataset.mdel,1);
+    render(); refreshBar(); return;
+  }
   if(t.id==='addingredient'){
     var nm=prompt('Ingredient name'); if(!nm) return;
     var sg=slugify(nm);
@@ -539,7 +576,13 @@ document.addEventListener('input',function(e){
     draft.settings.shipping[t.dataset.ship]=toPence(t.value); }
   if(t.dataset.free){ draft.settings.free_over=draft.settings.free_over||{};
     draft.settings.free_over[t.dataset.free]=toPence(t.value); }
+  if(t.dataset.zone!==undefined){
+    draft.settings.zones[+t.dataset.zone].active=t.checked; render(); }
   if(t.dataset.collect){ draft.settings.collect_address=t.value; }
+  if(t.dataset.m!==undefined&&t.dataset.mf){
+    var mm=draft.settings.shipping_methods[+t.dataset.m];
+    mm[t.dataset.mf]= t.dataset.mf==='price' ? toPence(t.value) : t.value;
+  }
   refreshBar();
 });
 
