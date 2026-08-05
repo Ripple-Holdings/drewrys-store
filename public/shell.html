@@ -626,13 +626,25 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 .up-no:hover{color:var(--ink)}
 
 /* ---------- credentials: grouped logo carousel ---------- */
-.credsec{padding:clamp(20px,2.4vh,32px) var(--pad);background:var(--slate)}
-.credsec .cred-in{max-width:var(--maxw);margin-inline:auto}
-.cred-stage{display:flex!important;flex-wrap:wrap;justify-content:center;
-  gap:clamp(18px,3.2vw,54px);max-width:none!important}
+.credsec{padding:clamp(16px,2vh,26px) 0;background:var(--slate);overflow:hidden}
+.credsec .cred-in{padding:0;max-width:none;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.credsec .cred-in::-webkit-scrollbar{display:none}
+.cred-stage{display:flex!important;flex-wrap:nowrap!important;
+  width:max-content;margin-inline:auto;padding-inline:var(--pad);
+  gap:clamp(20px,2.8vw,46px);max-width:none!important}
 .cred-group{grid-area:auto!important;display:contents!important}
-.credsec .cred-item{font-size:.92rem;color:var(--cotton);animation:none}
-.credsec .cred-ic{width:26px;height:26px;color:var(--peanut)}
+.credsec .cred-item{flex:0 0 auto!important;max-width:none!important;
+  flex-direction:row!important;white-space:nowrap!important;
+  gap:9px!important;font-size:.88rem;color:var(--cotton);animation:none}
+.credsec .cred-ic{width:23px!important;height:23px!important;color:var(--peanut)}
+@media(max-width:700px){.credsec .cred-item{font-size:.8rem}
+  .credsec .cred-ic{width:20px!important;height:20px!important}}
+.credsec .cred-in{-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.credsec.is-marquee .cred-stage{animation:credDrift 46s linear infinite}
+.credsec.is-marquee:hover .cred-stage{animation-play-state:paused}
+@keyframes credDrift{from{transform:translateX(0)}to{transform:translateX(calc(-50% - var(--cred-gap,33px) / 2))}}
+@media(prefers-reduced-motion:reduce){.credsec.is-marquee .cred-stage{animation:none}}
 .cred-in{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad)}
 .cred-head{font-family:"NeueMontreal";font-weight:500;letter-spacing:-.014em;
   font-size:clamp(1.73rem,4.9vw,4.25rem);line-height:1.04;text-align:center;
@@ -1096,6 +1108,20 @@ grid.innerHTML=PRODUCTS.map((p,i)=>`
       <div class="prow"><span class="price">${money(p.p)}</span><div class="pbtns"><button class="learn" type="button">Learn more</button>${soldOut(p)?'<button class="add add--out" disabled>Sold out</button>':'<button class="add">Add</button>'}</div></div>
     </div>
   </article>`).join('');
+
+(function(){
+  var sec=document.querySelector('.credsec'), stage=sec&&sec.querySelector('.cred-stage');
+  if(!sec||!stage) return;
+  var items=[].slice.call(stage.querySelectorAll('.cred-item'));
+  if(!items.length) return;
+  var dupe=document.createElement('div');
+  dupe.className='cred-group'; dupe.setAttribute('aria-hidden','true');
+  items.forEach(function(it){ dupe.appendChild(it.cloneNode(true)); });
+  stage.appendChild(dupe);
+  var gap=parseFloat(getComputedStyle(stage).columnGap)||33;
+  sec.style.setProperty('--cred-gap', gap+'px');
+  sec.classList.add('is-marquee');
+})();
 
 const bagN=document.getElementById('bagN');
 function syncBadge(){ const n=cartCount(); bagN.textContent=n; bagN.style.display = n>0 ? 'grid' : 'none'; }
