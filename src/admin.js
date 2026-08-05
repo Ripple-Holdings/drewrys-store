@@ -78,7 +78,7 @@ header .sp{flex:1}
 header button{background:none;border:1px solid #4a453d;color:var(--cotton);
   padding:8px 14px;border-radius:9px;font-size:13px;cursor:pointer;min-height:40px}
 nav{position:sticky;top:48px;z-index:19;background:var(--cotton);
-  display:flex;gap:6px;padding:12px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  display:flex;gap:8px;padding:12px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 nav button{border:1px solid var(--line);background:var(--cotton-2);color:var(--ink);
   padding:9px 17px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;min-height:44px}
 nav button[aria-selected=true]{background:var(--olive);color:var(--cotton);border-color:var(--olive)}
@@ -114,7 +114,12 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
-.ofilter{display:flex;gap:6px;margin-bottom:12px}
+.stars{color:var(--peanut);letter-spacing:1px}
+.stars .off{color:var(--line)}
+.quote{background:var(--cotton);border-radius:12px;padding:13px 15px;font-size:14.5px;
+  line-height:1.6;font-style:italic}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.ofilter{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
 .ofilter button{border:1px solid var(--line);background:#fff;color:var(--muted);
   padding:8px 15px;border-radius:99px;font-size:13.5px;cursor:pointer;min-height:40px}
 .ofilter button.on{background:var(--ink);color:var(--cotton);border-color:var(--ink)}
@@ -122,10 +127,16 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .fulfil{margin-top:14px;width:100%;padding:13px;border:0;border-radius:11px;
   background:var(--ink);color:var(--cotton);font-size:15px;font-weight:650;cursor:pointer;min-height:48px}
 .fulfil:disabled{opacity:.5;cursor:default}
+.fulfil.inline{display:inline-flex;align-items:center;justify-content:center;width:auto;
+  margin-top:0;padding:0 22px;height:44px;min-height:44px;border-radius:10px;font-size:14px}
 .doneline{margin-top:12px;padding:11px 13px;border-radius:11px;background:#e9f0e6;
   font-size:13.5px;color:#2c5c2c}
-.ghost{border:1px solid var(--line);background:#fff;color:var(--ink);padding:9px 15px;
-  border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px}
+.ghost{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);
+  background:#fff;color:var(--ink);padding:0 18px;border-radius:10px;font-size:14px;
+  cursor:pointer;height:44px;font-family:inherit}
+.ghost:hover{background:var(--cotton)}
+.ghost.del{color:#a33;border-color:#e0c3c3}
+.ghost.del:hover{background:#fdf2f2;border-color:#d3a9a9}
 .svcrow{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
 .svcmain{flex:1;min-width:0;display:grid;gap:6px}
 .svcp{flex:0 0 118px}
@@ -202,6 +213,7 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
   <button data-tab="stock" aria-selected="false">Stock</button>
   <button data-tab="delivery" aria-selected="false">Delivery</button>
   <button data-tab="orders" aria-selected="false">Orders</button>
+  <button data-tab="reviews" aria-selected="false">Reviews</button>
 </nav>
 <main id="main"></main>
 <div class="savebar" id="savebar"><span class="sp" id="dirty"></span>
@@ -216,7 +228,7 @@ var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
-var tab='catalogue', openCard=null, orderView='todo';
+var tab='catalogue', openCard=null, orderView='todo', revView='pending';
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -502,6 +514,81 @@ function render(){
     });
   }
 
+  if(tab==='reviews'){
+    var revs=S.reviews||[];
+    var pend=revs.filter(function(r){return r.status==='pending';});
+    var pub=revs.filter(function(r){return r.status==='published';});
+    var hid=revs.filter(function(r){return r.status==='hidden';});
+    var list={pending:pend,published:pub,hidden:hid}[revView]||pend;
+    var links=(S.platforms||[]);
+    var platName=links.map(function(x){return x.name;}).join(' / ')||'public';
+
+    h+='<div class="ofilter">'+
+      [['pending','To review',pend.length],['published','Published',pub.length],
+       ['hidden','Hidden',hid.length],['settings','Settings',0]]
+      .map(function(v){return '<button type="button" data-rview="'+v[0]+'"'+
+        (revView===v[0]?' class="on"':'')+'>'+v[1]+(v[2]?' ('+v[2]+')':'')+'</button>';}).join('')+
+      '</div>';
+
+    if(revView==='settings'){
+
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Reviews</b><span>When the request goes out, and who gets asked publicly</span></div></div>'+
+      '<div class="body"><div class="two">'+
+        '<div><label>Days after collection</label>'+
+          '<input data-rs="review_delay_collect" type="number" min="0" value="'+
+          Number(draft.settings.review_delay_collect||0)+'"></div>'+
+        '<div><label>Days after delivery</label>'+
+          '<input data-rs="review_delay_deliver" type="number" min="0" value="'+
+          Number(draft.settings.review_delay_deliver||0)+'"></div></div>'+
+      '<label>Google review link</label>'+
+      '<input data-rs="review_google_url" value="'+esc(draft.settings.review_google_url||'')+
+        '" placeholder="https://g.page/r/.../review">'+
+      '<label>Facebook review link</label>'+
+      '<input data-rs="review_facebook_url" value="'+esc(draft.settings.review_facebook_url||'')+
+        '" placeholder="https://facebook.com/yourpage/reviews">'+
+      '<div class="hint">Set either or both. Whatever is filled in appears in the invite '+
+      'email and on the copy-and-post page.</div>'+
+      '<label>Send the public invite from</label>'+
+      '<select data-rs="review_ask_from">'+
+        [0,1,2,3,4,5].map(function(n){return '<option value="'+n+'"'+
+          (Number(draft.settings.review_ask_from)===n?' selected':'')+'>'+
+          (n===0?'Never, keep reviews internal':(n===1?'Everyone':n+' stars and up'))+
+          '</option>';}).join('')+
+      '</select>'+
+      '<div class="check"><input type="checkbox" id="rap" data-rs="review_auto_publish"'+
+        (draft.settings.review_auto_publish?' checked':'')+
+        '><label for="rap" style="margin:0">Publish new reviews without checking them first</label></div>'+
+      '</div></div>';
+      m.innerHTML=h; refreshBar(); return;
+    }
+
+    if(!revs.length) h+='<div class="note">No reviews yet. They arrive '+
+      Number(draft.settings.review_delay_collect||0)+' days after a collection and '+
+      Number(draft.settings.review_delay_deliver||0)+' days after a delivery.</div>';
+    else if(!list.length) h+='<div class="note">Nothing here.</div>';
+
+    list.forEach(function(r){
+      h+='<div class="card open"><div class="head" style="cursor:default">'+
+        '<div class="hmeta"><b>'+esc(r.name||'Anonymous')+' '+
+          '<span class="stars">'+'&#9733;'.repeat(r.rating)+
+          '<span class="off">'+'&#9733;'.repeat(5-r.rating)+'</span></span></b>'+
+        '<span>'+esc(String(r.created||'').slice(0,10))+' &middot; order '+esc(r.reference)+
+        (r.invited?' &middot; invited to '+esc(platName||'post publicly'):'')+'</span></div>'+
+        '<span class="badge '+(r.status==='published'?'b-ok':(r.status==='hidden'?'b-out':'b-low'))+'">'+
+        esc(r.status)+'</span></div><div class="body">'+
+        (r.text?'<div class="quote">'+esc(r.text)+'</div>':'<div class="hint">No words, rating only.</div>')+
+        '<div class="row" style="margin-top:14px">'+
+        (r.status!=='published'?'<button type="button" class="fulfil inline" data-rev="publish" data-rid="'+esc(r.id)+'">Publish</button>':'')+
+        (r.status!=='hidden'?'<button type="button" class="ghost" data-rev="hide" data-rid="'+esc(r.id)+'">Hide</button>':'')+
+        (r.status==='hidden'?'<button type="button" class="ghost" data-rev="pending" data-rid="'+esc(r.id)+'">Back to review</button>':'')+
+        (links.length?'<button type="button" class="ghost" data-rev="invite" data-rid="'+esc(r.id)+'">'+
+          (r.invited?'Resend':'Send')+' '+esc(platName)+' invite</button>':'')+
+        '<button type="button" class="ghost del" data-rev="delete" data-rid="'+esc(r.id)+'">Delete</button>'+
+        '</div></div></div>';
+    });
+  }
+
   m.innerHTML=h;
   refreshBar();
 }
@@ -512,10 +599,29 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],'+
-    '[data-act],#addnew,#addingredient');
+    '[data-act],[data-rview],[data-rev],#addnew,#addingredient');
   if(!t) return;
 
   if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; render(); return; }
+
+  if(t.dataset.rview!==undefined){ revView=t.dataset.rview; render(); return; }
+
+  if(t.dataset.rev!==undefined){
+    var rid=t.dataset.rid, ract=t.dataset.rev;
+    if(ract==='delete'&&!confirm('Delete this review for good?')) return;
+    var wasR=t.textContent; t.disabled=true; t.textContent='Working...';
+    fetch('/admin',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':KEY},
+      body:JSON.stringify({review:{id:rid,action:ract}})})
+      .then(function(r){ if(!r.ok) throw new Error('failed'); return r.json(); })
+      .then(function(res){
+        if(ract==='delete') S.reviews=S.reviews.filter(function(x){return x.id!==rid;});
+        else { var i=S.reviews.findIndex(function(x){return x.id===rid;}); if(i>=0) S.reviews[i]=res.review; }
+        render();
+        toast(ract==='invite' ? (res.emailed?'Invite sent':'Invite did not send') : 'Done');
+      })
+      .catch(function(){ t.disabled=false; t.textContent=wasR; toast('That did not work'); });
+    return;
+  }
 
   if(t.dataset.act!==undefined){
     var ref=t.dataset.ref, act=t.dataset.act;
@@ -693,6 +799,11 @@ document.addEventListener('input',function(e){
   if(t.dataset.zone!==undefined){
     draft.settings.zones[+t.dataset.zone].active=t.checked; render(); }
   if(t.dataset.collect){ draft.settings.collect_address=t.value; }
+  if(t.dataset.rs){
+    draft.settings[t.dataset.rs] = t.type==='checkbox' ? t.checked
+      : (t.type==='number'||t.dataset.rs==='review_ask_from' ? (parseInt(t.value,10)||0) : t.value);
+    if(t.dataset.rs==='review_ask_from') render();
+  }
   if(t.dataset.m!==undefined&&t.dataset.mf){
     var mm=draft.settings.shipping_methods[+t.dataset.m];
     mm[t.dataset.mf]= t.dataset.mf==='price' ? toPence(t.value) : t.value;

@@ -20,7 +20,10 @@ import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
 import { COUNTRIES } from './countries.js';
 import { CARRIERS, confirmationEmails, dispatchedEmail, readyEmail,
-         collectedEmail } from './fulfilment.js';
+         collectedEmail, reviewRequestEmail, publicReviewInviteEmail } from './fulfilment.js';
+import { REVIEW_DEFAULTS, livePlatforms, newToken, reviewId, queueReviewRequest, takeDue,
+         getReviews, putReviews, publishedReviews, ratingSummary,
+         reviewFormPage, reviewGonePage, reviewSharePage } from './reviews.js';
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
@@ -51,6 +54,7 @@ async function renderSite(request, env) {
   const cat = await getCatalogue(env);
   const settings = await getSettings(env);
   const live = cat.products.filter((p) => p.active !== false);
+  const allReviews = await getReviews(env);
 
   const payload = {
     products: live,
@@ -60,6 +64,8 @@ async function renderSite(request, env) {
     free_over: settings.free_over || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     ingredients: await getIngredients(env),
+    reviews: publishedReviews(allReviews),
+    ratings: ratingSummary(allReviews),
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
     address_lookup: !!env.ADDRESS_API_KEY,
   };
@@ -180,6 +186,160 @@ async function handleWebhook(request, env, ctx) {
   return new Response('ok', { status: 200 });
 }
 
+/* ── reviews ─────────────────────────────────────────────────────────────── */
+
+/**
+ * One token, one review. The token is deleted on submission so a forwarded
+ * link cannot be used twice, and an unknown token says so rather than
+ * silently rendering an empty form.
+ */
+async function handleReview(request, env, token) {
+  const clean = String(token || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
+  if (!clean) return html(reviewGonePage('That link is not valid'), 404);
+
+  const ref = await env.DREWRYS_KV.get(`review:token:${clean}`);
+  if (!ref) return html(reviewGonePage('That link has already been used'), 410);
+
+  const raw = await env.DREWRYS_KV.get(`order:${ref}`);
+  if (!raw) return html(reviewGonePage('We cannot find that order'), 404);
+  const order = JSON.parse(raw);
+
+  if (request.method !== 'POST') return html(reviewFormPage(order, clean));
+
+  const body = await request.json().catch(() => null);
+  const rating = Math.max(1, Math.min(5, parseInt(body?.rating, 10) || 0));
+  if (!rating) return json({ error: 'Please choose a rating' }, 400);
+
+  const settings = await getSettings(env);
+  const review = {
+    id: reviewId(),
+    reference: ref,
+    rating,
+    name: String(body.name || order.customer?.name || '').trim().slice(0, 60),
+    text: String(body.text || '').trim().slice(0, 1200),
+    products: (order.items || []).map((i) => i.sku),
+    email: order.customer?.email || '',
+    created: new Date().toISOString(),
+    status: settings.review_auto_publish ? 'published' : 'pending',
+    invited: false,
+  };
+
+  const list = await getReviews(env);
+  await putReviews(env, [review, ...list]);
+  await env.DREWRYS_KV.delete(`review:token:${clean}`);
+
+  // The public invite. `review_ask_from` decides who sees it; see the warning
+  // at the top of reviews.js before raising it above 1.
+  // review_ask_from of 0 switches the public invite off entirely
+  const from = Number(settings.review_ask_from ?? REVIEW_DEFAULTS.review_ask_from);
+  const platforms = livePlatforms(settings);
+  const invite = platforms.length && from > 0 && rating >= from;
+
+  if (invite) {
+    review.invited = true;
+    await putReviews(env, [review, ...list]);
+    await env.DREWRYS_KV.put(`review:share:${review.id}`, review.id,
+      { expirationTtl: 60 * 60 * 24 * 90 });
+    if (review.email) {
+      await sendEmail(env, {
+        to: review.email,
+        subject: 'Thank you from Drewrys',
+        html: publicReviewInviteEmail(review, {
+          origin: env.SITE_ORIGIN,
+          contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+          platforms,
+          shareUrl: `${String(env.SITE_ORIGIN || '').replace(/\/$/, '')}/review/share/${review.id}`,
+        }),
+      });
+    }
+  }
+
+  return json({ ok: true, share: invite ? `/review/share/${review.id}` : null });
+}
+
+/** Publish, hide, delete, or send the public invite by hand. */
+async function moderateReview(env, body) {
+  const id = String(body.id || '');
+  const action = String(body.action || '');
+  const list = await getReviews(env);
+  const i = list.findIndex((r) => r.id === id);
+  if (i < 0) return json({ error: 'review not found' }, 404);
+  const review = list[i];
+
+  if (action === 'publish') review.status = 'published';
+  else if (action === 'hide') review.status = 'hidden';
+  else if (action === 'pending') review.status = 'pending';
+  else if (action === 'delete') list.splice(i, 1);
+  else if (action === 'invite') {
+    const settings = await getSettings(env);
+    const platforms = livePlatforms(settings);
+    if (!platforms.length) return json({ error: 'no review link is set' }, 400);
+    if (!review.email) return json({ error: 'no email on that review' }, 400);
+    await env.DREWRYS_KV.put(`review:share:${review.id}`, review.id,
+      { expirationTtl: 60 * 60 * 24 * 90 });
+    const ok = await sendEmail(env, {
+      to: review.email,
+      subject: 'Thank you from Drewrys',
+      html: publicReviewInviteEmail(review, {
+        origin: env.SITE_ORIGIN,
+        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        platforms,
+        shareUrl: `${String(env.SITE_ORIGIN || '').replace(/\/$/, '')}/review/share/${review.id}`,
+      }),
+    });
+    if (ok) review.invited = new Date().toISOString();
+    await putReviews(env, list);
+    return json({ ok: true, review, emailed: ok });
+  } else return json({ error: 'unknown action' }, 400);
+
+  await putReviews(env, list);
+  return json({ ok: true, review: action === 'delete' ? null : review });
+}
+
+/** Their own words, a copy button, then Google and Facebook. */
+async function handleShare(env, id) {
+  const clean = String(id || '').replace(/[^a-z0-9]/gi, '').slice(0, 32);
+  const list = await getReviews(env);
+  const review = list.find((r) => r.id === clean);
+  if (!review) return html(reviewGonePage('That link has expired'), 404);
+  const platforms = livePlatforms(await getSettings(env));
+  if (!platforms.length) return html(reviewGonePage('Nothing to share just yet'), 404);
+  return html(reviewSharePage(review, platforms));
+}
+
+/** Daily: send any review request that has come due. */
+async function sendDueReviewRequests(env) {
+  const due = await takeDue(env);
+  let sent = 0;
+  for (const item of due) {
+    const raw = await env.DREWRYS_KV.get(`order:${item.reference}`);
+    if (!raw) continue;
+    const order = JSON.parse(raw);
+    if (order.review_requested) continue;
+
+    const token = newToken();
+    await env.DREWRYS_KV.put(`review:token:${token}`, item.reference,
+      { expirationTtl: 60 * 60 * 24 * 60 });
+
+    const ok = await sendEmail(env, {
+      to: item.email,
+      subject: `How did we do?`,
+      html: reviewRequestEmail(order, {
+        origin: env.SITE_ORIGIN,
+        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        token,
+      }),
+    });
+    if (ok) {
+      order.review_requested = new Date().toISOString();
+      await env.DREWRYS_KV.put(`order:${item.reference}`, JSON.stringify(order),
+        { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+      sent += 1;
+    }
+  }
+  return { due: due.length, sent };
+}
+
 /* ── admin ───────────────────────────────────────────────────────────────── */
 
 async function recentOrders(env) {
@@ -254,6 +414,10 @@ async function fulfilOrder(env, body) {
   await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
     { expirationTtl: 60 * 60 * 24 * 365 * 7 });
 
+  if (order.status === 'collected' || order.status === 'dispatched') {
+    await queueReviewRequest(env, order, await getSettings(env));
+  }
+
   const stage = STAGE_EMAIL[order.status];
   const wants = stage && (action === 'resend' || !order.notified[stage]);
   if (wants && order.customer?.email) {
@@ -323,6 +487,7 @@ async function handleAdmin(request, env, url) {
 
     // order actions are immediate, not part of the save-draft flow
     if (body.order) return fulfilOrder(env, body.order);
+    if (body.review) return moderateReview(env, body.review);
 
     // Photos first, so the catalogue can be written with their final URLs.
     const savedImages = {};
@@ -409,6 +574,12 @@ async function handleAdmin(request, env, url) {
           })).filter((m) => m.id && m.zone && m.name),
         free_over: Object.fromEntries(Object.entries(st.free_over || {})
           .map(([k, v]) => [k, Math.max(0, parseInt(v, 10) || 0)])),
+        review_delay_collect: Math.max(0, parseInt(st.review_delay_collect, 10) || 0),
+        review_delay_deliver: Math.max(0, parseInt(st.review_delay_deliver, 10) || 0),
+        review_ask_from: Math.max(0, Math.min(5, parseInt(st.review_ask_from, 10) || 0)),
+        review_google_url: String(st.review_google_url || '').slice(0, 400),
+        review_facebook_url: String(st.review_facebook_url || '').slice(0, 400),
+        review_auto_publish: st.review_auto_publish === true,
       };
       await env.DREWRYS_KV.put('settings', JSON.stringify(clean));
     }
@@ -424,18 +595,35 @@ async function handleAdmin(request, env, url) {
     orders: await recentOrders(env),
     ingredients: await getIngredients(env),
     carriers: CARRIERS,
+    reviews: await getReviews(env),
+    platforms: livePlatforms(await getSettings(env)),
   }));
 }
 
 /* ── router ──────────────────────────────────────────────────────────────── */
 
 export default {
+  /**
+   * Cron. Sends review requests that have come due. Runs daily; the queue
+   * carries its own due timestamps so the exact hour does not matter.
+   */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => {
+      try {
+        const r = await sendDueReviewRequests(env);
+        console.log('review requests', JSON.stringify(r));
+      } catch (e) { console.error('cron failed', e); }
+    })());
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
     try {
       if (path === '/' || path === '/index.html') return renderSite(request, env);
       if (path === '/checkout') return renderCheckout(env);
+      if (path.startsWith('/review/share/')) return handleShare(env, path.slice(14));
+      if (path.startsWith('/review/')) return handleReview(request, env, path.slice(8));
       if (path === '/api/address') return lookupPostcode(request, env, url);
       if (path === '/api/catalogue') {
         const cat = await getCatalogue(env);

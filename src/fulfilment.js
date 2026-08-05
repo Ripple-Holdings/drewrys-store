@@ -296,6 +296,74 @@ export function collectedEmail(order, opts = {}) {
   `);
 }
 
+/** The review request, sent on a delay after fulfilment. */
+export function reviewRequestEmail(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const c = order.customer || {};
+  const link = `${String(origin).replace(/\/$/, '')}/review/${opts.token}`;
+
+  return shell(`
+    ${masthead(origin)}
+    ${heading('How did we do?')}
+    <tr><td style="padding:14px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Hello${c.name ? ' ' + esc(String(c.name).split(' ')[0]) : ''}. You ordered from us a little while
+      back and we would like to know how you got on.
+    </td></tr>
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    <tr><td align="center" style="padding:26px 28px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="center" bgcolor="${INK}" style="background-color:${INK};border-radius:999px">
+          <a href="${link}" style="display:inline-block;padding:15px 32px;font-family:${SANS};
+            font-size:15px;font-weight:700;color:${COTTON};text-decoration:none">Leave a review</a>
+        </td></tr></table></td></tr>
+    ${footNote(contact)}
+  `);
+}
+
+/** The follow-up, inviting them to post it publicly. */
+export function publicReviewInviteEmail(review, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const platforms = opts.platforms || [];
+  const share = opts.shareUrl || '';
+  const first = String(review.name || '').split(' ')[0];
+  const names = platforms.map((p) => esc(p.name));
+  const both = names.length > 1
+    ? names.slice(0, -1).join(', ') + ' or ' + names[names.length - 1]
+    : (names[0] || 'Google');
+
+  return shell(`
+    ${masthead(origin)}
+    ${heading('Thank you')}
+    <tr><td style="padding:14px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Thanks for the review${first ? ', ' + esc(first) : ''}. It means a lot to a small shop.
+    </td></tr>
+    ${review.text ? `<tr><td style="padding:18px 28px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td bgcolor="${COTTON}" style="background-color:${COTTON};border-radius:12px;padding:16px 18px;
+          font-family:${SANS};font-size:14.5px;line-height:1.6;color:${INK};font-style:italic">
+          ${esc(review.text).slice(0, 500)}
+        </td></tr></table></td></tr>` : ''}
+    <tr><td style="padding:22px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      If you have a moment, would you post the same on ${both}? One tap below copies
+      what you wrote so you can paste it straight in.
+    </td></tr>
+    ${share ? `<tr><td align="center" style="padding:22px 28px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td align="center" bgcolor="${INK}" style="background-color:${INK};border-radius:999px">
+          <a href="${share}" style="display:inline-block;padding:15px 32px;font-family:${SANS};
+            font-size:15px;font-weight:700;color:${COTTON};text-decoration:none">Copy it and post</a>
+        </td></tr></table></td></tr>` : ''}
+    ${platforms.length ? `<tr><td align="center" style="padding:16px 28px 0;font-family:${SANS};
+      font-size:13.5px;color:${MUTED}">Or go straight there:
+      ${platforms.map((p) => `<a href="${esc(p.url)}" style="color:${PEANUT};font-weight:700;
+        text-decoration:underline;padding:0 6px">${esc(p.name)}</a>`).join(' ')}
+    </td></tr>` : ''}
+    ${footNote(contact)}
+  `);
+}
+
 /** Sent when a delivery order is marked dispatched. */
 export function dispatchedEmail(order, opts = {}) {
   const origin = opts.origin || 'https://drewrys.store';
