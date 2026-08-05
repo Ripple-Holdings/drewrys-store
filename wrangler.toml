@@ -19,10 +19,15 @@ binding = "ASSETS"
 binding = "DREWRYS_KV"
 id = "7ab8ffff01814fb78607261c7111c51d"
 
+# Daily cron. Sends review requests that have come due; the queue carries its
+# own timestamps so the hour is not critical. 09:00 UTC.
+[triggers]
+crons = ["0 9 * * *"]
+
 [vars]
 SHOP_NAME = "Drewrys"
 SITE_ORIGIN = "https://drewrys.store"
-TEYA_ENV = "production"
+TEYA_ENV = "staging"
 
 # Secrets — set these in the Cloudflare dashboard under the Worker's
 # Settings › Variables and Secrets (encrypted). Not here, and not via
