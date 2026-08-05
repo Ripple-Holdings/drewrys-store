@@ -379,18 +379,48 @@ export async function createSession(request, env) {
   // guessed, and `type` is required. There is no documented reference field, so
   // our own reference travels on the return URLs and via the Idempotency-Key,
   // and the session id is mapped back to it in KV once Teya answers.
+  // Teya validates that the line items sum EXACTLY to amount.value
+  // (LINE_ITEMS_TOTAL_MISMATCH), so delivery and any discount have to appear as
+  // lines of their own. Products alone summed to the subtotal, which is wrong
+  // the moment a promo code or a delivery charge is involved.
+  const lineItems = basket.items.map(({ name, quantity, unit_amount }) => ({
+    description: name,
+    quantity,
+    unit_price: unit_amount,
+  }));
+  if (basket.shipping > 0) {
+    lineItems.push({
+      description: (basket.method && basket.method.name) || 'Delivery',
+      quantity: 1,
+      unit_price: basket.shipping,
+    });
+  }
+  if (basket.discount > 0) {
+    lineItems.push({
+      description: `Discount${basket.promo ? ' ' + basket.promo : ''}`,
+      quantity: 1,
+      unit_price: -basket.discount,
+    });
+  }
+
+  const lineSum = lineItems.reduce((n, l) => n + (l.unit_price * l.quantity), 0);
+
   const body = {
     store_id: env.TEYA_STORE_ID,
     amount: { value: basket.total, currency: 'GBP' },
     type: 'SALE',
-    line_items: basket.items.map(({ name, quantity, unit_amount }) => ({
-      description: name,
-      quantity,
-      unit_price: unit_amount,
-    })),
     success_url: `${origin}/?paid=1&ref=${reference}`,
     cancel_url: `${origin}/?cancelled=1&ref=${reference}`,
   };
+
+  // Last line of defence: if the arithmetic does not reconcile for any reason,
+  // send no line items rather than a total Teya will reject. The charge is the
+  // thing that matters; the itemisation is presentation.
+  if (lineSum === basket.total) {
+    body.line_items = lineItems;
+  } else {
+    console.error('line items do not sum to total, sending none:', lineSum, 'vs', basket.total);
+  }
 
   // getAccessToken THROWS when the token exchange fails, and an uncaught throw
   // here escapes the Worker and Cloudflare answers with an HTML error page - so
