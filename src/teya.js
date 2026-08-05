@@ -5,7 +5,7 @@
  * client-side and editable, so only sku and qty are read off the request and
  * every amount is recalculated here against the same `catalogue` key the shop
  * renders from. Ben editing a price in /admin therefore changes the shop and
- * the charge in one move — they cannot drift apart.
+ * the charge in one move - they cannot drift apart.
  *
  * UNVERIFIED until staging credentials exist: the exact request field names,
  * whether Authorization is Bearer or Basic, and the webhook signature header.
@@ -94,7 +94,8 @@ export async function priceBasket(env, payload) {
     const take = stock === null ? qty : Math.min(qty, stock); // never oversell
 
     subtotal += p.price_pence * take;
-    items.push({ sku: p.slug, name: p.name, quantity: take, unit_amount: p.price_pence });
+    items.push({ sku: p.slug, name: p.name, quantity: take, unit_amount: p.price_pence,
+                 size: p.size || '', image: p.image || '' });
   }
   if (!items.length) throw new Error('empty basket');
 
@@ -220,7 +221,7 @@ export async function createSession(request, env) {
   const res = await fetch(`${base}/v2/checkout/sessions`, {
     method: 'POST',
     headers: {
-      // CHECK against the credential Ben generates — may be Basic.
+      // CHECK against the credential Ben generates - may be Basic.
       'Authorization': `Bearer ${env.TEYA_API_KEY}`,
       'Content-Type': 'application/json',
       'Idempotency-Key': reference,
@@ -244,7 +245,7 @@ export async function createSession(request, env) {
 }
 
 export async function verifySignature(raw, sig, secret) {
-  if (!secret) return true; // not configured yet — do not hard-fail staging
+  if (!secret) return true; // not configured yet - do not hard-fail staging
   if (!sig) return false;
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(secret),

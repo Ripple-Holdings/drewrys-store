@@ -1,5 +1,5 @@
 /**
- * Card and wallet marks, shown wherever we ask for money — the bag and the
+ * Card and wallet marks, shown wherever we ask for money - the bag and the
  * checkout page. One source so the two can never drift apart.
  *
  * These advertise what Ben accepts, so Apple Pay and Google Pay must be

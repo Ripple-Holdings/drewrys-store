@@ -1,7 +1,7 @@
 /**
  * Admin UI for the Drewrys store.
  *
- * Kept in its own module because it is mostly markup — index.js stays about
+ * Kept in its own module because it is mostly markup - index.js stays about
  * routing and orders.
  *
  * Design notes, all deliberate:
@@ -290,7 +290,7 @@ function render(){
             '<input data-i="'+i+'" data-f="tagline" value="'+esc(p.tagline)+'">'+
           '<label>Description <span style="font-weight:400">(shown in Learn more)</span></label>'+
             '<textarea data-i="'+i+'" data-f="description">'+esc(p.description)+'</textarea>'+
-          '<label>Ingredients <span style="font-weight:400">(order matters &mdash; the first one opens by default)</span></label>'+
+          '<label>Ingredients <span style="font-weight:400">(order matters - the first one opens by default)</span></label>'+
             '<div class="chips">'+LIB.map(function(m){
               var pos=(p.ingredients||[]).indexOf(m.name);
               var ic=iconUploads[m.slug]||m.icon;
@@ -299,7 +299,7 @@ function render(){
                 (ic?'<img class="cicon" src="'+esc(ic)+'" alt="">':'')+
                 esc(m.name)+'</button>';
             }).join('')+'</div>'+
-            '<div class="hint">Dashed ones have no icon yet, so they will not show on the card &mdash; '+
+            '<div class="hint">Dashed ones have no icon yet, so they will not show on the card - '+
             'add one on the Ingredients tab. Tap again to remove; numbers show the order they appear in.</div>'+
           '<label>How to use <span style="font-weight:400">(one step per box)</span></label>'+
             '<div class="steps">'+((p.howto||[]).map(function(st,si){
@@ -373,14 +373,14 @@ function render(){
 
   if(tab==='delivery'){
     h+='<div class="note">Collection is always free. Each destination can have '+
-       'one or more services &mdash; two or more and the customer chooses. '+
+       'one or more services - two or more and the customer chooses. '+
        'Turn a destination off and the site will not accept orders for it.</div>';
     h+='<div class="card open"><div class="head" style="cursor:default">'+
       '<div class="hmeta"><b>Collection address</b><span>Shown in the bag and on the confirmation email</span></div></div>'+
       '<div class="body"><label>Address</label>'+
       '<input data-collect="1" value="'+esc(draft.settings.collect_address||'')+
       '" placeholder="Drewrys, 1 Example Street, Douglas, IM1 1AA">'+
-      '<div class="note" style="margin:10px 0 0;padding:9px 11px">Separate with commas &mdash; '+
+      '<div class="note" style="margin:10px 0 0;padding:9px 11px">Separate with commas - '+
       'each part shows on its own line.</div></div></div>';
 
     (draft.settings.zones||[]).forEach(function(z,zi){
@@ -401,7 +401,7 @@ function render(){
             pounds(m.price)+'"></div>'+
           '<button type="button" class="x" data-mdel="'+mi+'">&times;</button></div>';
       });
-      if(!mine.length) h+='<div class="hint">No service yet &mdash; nobody can order to '+esc(z.name)+'.</div>';
+      if(!mine.length) h+='<div class="hint">No service yet - nobody can order to '+esc(z.name)+'.</div>';
       h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>'+
         '<label>Free delivery over <span style="font-weight:400">(0 for none)</span></label>'+
         '<div class="money" style="max-width:180px"><span>£</span><input data-free="'+esc(z.id)+
@@ -409,7 +409,7 @@ function render(){
         '</div></div>';
     });
     h+='<div class="note">Anywhere not listed above is refused at the basket with a note '+
-       'that collection is still available &mdash; better than taking an order you cannot post.</div>';
+       'that collection is still available - better than taking an order you cannot post.</div>';
   }
 
   if(tab==='orders'){
@@ -438,7 +438,7 @@ function render(){
       var badge={
         paid: collect?'<span class="badge b-low">Needs packing</span>'
                      :'<span class="badge b-low">Awaiting dispatch</span>',
-        ready:'<span class="badge b-low">Ready &mdash; waiting for customer</span>',
+        ready:'<span class="badge b-low">Ready - waiting for customer</span>',
         collected:'<span class="badge b-ok">Collected</span>',
         dispatched:'<span class="badge b-ok">Dispatched</span>'
       }[o.status]||'<span class="badge b-out">'+esc(o.status)+'</span>';
@@ -453,7 +453,7 @@ function render(){
           '</td><td>£'+pounds(i.unit_amount*i.quantity)+'</td></tr>';}).join('')+
         '</table>'+
         '<label>'+(collect?'Customer':'Deliver to')+'</label>'+
-        '<div class="addr">'+esc((o.customer||{}).name||'&mdash;')+'<br>'+
+        '<div class="addr">'+esc((o.customer||{}).name||'-')+'<br>'+
         esc((o.customer||{}).email||'')+(((o.customer||{}).phone)?'<br>'+esc(o.customer.phone):'')+
         (collect?'':'<br>'+esc((o.customer||{}).address||''))+'</div>';
 
@@ -468,7 +468,7 @@ function render(){
             (n.ready?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
             '<button type="button" class="fulfil" data-act="collected" data-ref="'+esc(o.reference)+'">'+
             'Customer has collected it</button>'+
-            '<div class="hint">Closes the order. No email &mdash; they are standing in front of you.</div>'+
+            '<div class="hint">Closes the order and emails them a receipt.</div>'+
             '<div class="row" style="margin-top:10px">'+
             '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend ready email</button>'+
             '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
@@ -488,7 +488,7 @@ function render(){
             '<button type="button" class="fulfil" data-act="dispatch" data-ref="'+esc(o.reference)+'">'+
             'Mark as dispatched</button>'+
             '<div class="hint">Emails the customer with the tracking link. '+
-            'Leave tracking blank if there is none &mdash; they still get told it is on its way.</div>';
+            'Leave tracking blank if there is none - they still get told it is on its way.</div>';
         } else {
           h+='<div class="doneline">Dispatched '+esc(String(o.fulfilled||'').slice(0,16).replace('T',' '))+
             (o.tracking?' &middot; '+esc(carrierLabel(o.carrier))+' '+esc(o.tracking):'')+
@@ -534,7 +534,7 @@ document.addEventListener('click',function(e){
         if(i>=0) S.orders[i]=res.order;
         render();
         toast(act==='undo' ? 'Stepped back'
-          : (res.emailed ? 'Done — customer emailed' : 'Done'));
+          : (res.emailed ? 'Done - customer emailed' : 'Done'));
       })
       .catch(function(){ t.disabled=false; t.textContent=was; toast('That did not save'); });
     return;
@@ -568,9 +568,9 @@ document.addEventListener('click',function(e){
     fi.accept='image/svg+xml,image/png,image/webp';
     fi.addEventListener('change',function(){
       var file=fi.files[0]; if(!file) return;
-      if(file.size>400000){ toast('Icon is over 400KB — please shrink it'); return; }
+      if(file.size>400000){ toast('Icon is over 400KB - please shrink it'); return; }
       var rd=new FileReader();
-      rd.onload=function(){ iconUploads[gs]=rd.result; render(); toast('Icon ready — press Save'); };
+      rd.onload=function(){ iconUploads[gs]=rd.result; render(); toast('Icon ready - press Save'); };
       rd.readAsDataURL(file);
     });
     fi.click(); return;
@@ -638,9 +638,9 @@ document.addEventListener('click',function(e){
     var f=document.createElement('input'); f.type='file'; f.accept='image/png,image/jpeg,image/webp';
     f.addEventListener('change',function(){
       var file=f.files[0]; if(!file) return;
-      if(file.size>1500000){ toast('That image is over 1.5MB — please shrink it first'); return; }
+      if(file.size>1500000){ toast('That image is over 1.5MB - please shrink it first'); return; }
       var rd=new FileReader();
-      rd.onload=function(){ uploads[slug]=rd.result; render(); toast('Image ready — press Save'); };
+      rd.onload=function(){ uploads[slug]=rd.result; render(); toast('Image ready - press Save'); };
       rd.readAsDataURL(file);
     });
     f.click(); return;
@@ -730,8 +730,8 @@ document.getElementById('save').addEventListener('click',async function(){
     if(res.images&&res.images.__ingredients){ LIB=res.images.__ingredients; }
     S.catalogue=clone(draft.catalogue); S.stock=clone(draft.stock);
     S.settings=clone(draft.settings); S.ingredients=clone(LIB);
-    uploads={}; iconUploads={}; render(); toast('Saved — the site is updated');
-  }catch(e){ toast('Save failed — nothing was changed'); }
+    uploads={}; iconUploads={}; render(); toast('Saved - the site is updated');
+  }catch(e){ toast('Save failed - nothing was changed'); }
   btn.disabled=false; btn.textContent='Save changes';
 });
 document.getElementById('lock').addEventListener('click',function(){

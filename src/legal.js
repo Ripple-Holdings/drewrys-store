@@ -2,7 +2,7 @@
  * Terms, Returns and Privacy.
  *
  * NOT LEGAL ADVICE. This is a solid, specific starting draft written against
- * how the shop actually works — Isle of Man trader, Teya hosted checkout,
+ * how the shop actually works - Isle of Man trader, Teya hosted checkout,
  * Cloudflare hosting, SendGrid email, no cookies, no accounts. Ben should
  * read it and, if he wants certainty, have an IoM solicitor glance at it.
  *
@@ -22,14 +22,14 @@ export const BUSINESS = {
   phone: 'TO BE CONFIRMED',
   site: 'drewrys.store',
 
-  // Delivery timescales, as advertised. Keep honest — these are promises.
-  dispatch: '1–2 working days',
-  delivery_iom: '1–2 working days',
-  delivery_uk: '3–5 working days',
-  delivery_intl: '7–21 working days',
+  // Delivery timescales, as advertised. Keep honest - these are promises.
+  dispatch: '1-2 working days',
+  delivery_iom: '1-2 working days',
+  delivery_uk: '3-5 working days',
+  delivery_intl: '7-21 working days',
 
   // Who pays to send an unwanted item back. Statutory minimum is the
-  // customer, provided that is stated before they order — which this does.
+  // customer, provided that is stated before they order - which this does.
   return_postage: 'customer',
 };
 

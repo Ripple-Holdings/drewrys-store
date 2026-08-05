@@ -6,7 +6,7 @@
  * belonging to a zone. A zone with two methods makes the customer choose; a
  * zone with one selects it automatically.
  *
- * Rest of world is deliberately absent rather than priced at zero — an order
+ * Rest of world is deliberately absent rather than priced at zero - an order
  * that cannot be fulfilled should be refused at the basket, not accepted and
  * then cancelled.
  */
@@ -50,7 +50,7 @@ export function methodsForZone(settings, zoneId) {
  *
  * A postcode beginning IM is the Isle of Man whatever the customer picked, so
  * a UK selection with an IM postcode is corrected down to the cheaper zone.
- * The reverse — claiming the Isle of Man with a postcode that is not IM —
+ * The reverse - claiming the Isle of Man with a postcode that is not IM -
  * is the underpaying direction and is rejected rather than corrected.
  */
 export function resolveZone(settings, country, postcode) {

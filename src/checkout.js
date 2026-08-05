@@ -1,12 +1,12 @@
 /**
- * /checkout — a page, not a panel.
+ * /checkout - a page, not a panel.
  *
  * The bag shows what you picked. This shows what it will cost to get it to
  * you and takes the details needed to send it. Card capture is not here:
  * Teya hosts that, so this page ends at "Continue to payment".
  *
  * The basket is read from localStorage and re-priced by the Worker at
- * /create-session, so nothing here is trusted — the summary is a preview.
+ * /create-session, so nothing here is trusted - the summary is a preview.
  */
 
 import { PAYMARKS } from './paymarks.js';

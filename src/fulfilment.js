@@ -1,18 +1,14 @@
 /**
- * Fulfilment: marking an order as gone, and telling the customer.
+ * Fulfilment, and every email that reaches a customer.
  *
- * Two shapes, because they are different jobs:
- *   collection — the customer walks in, Ben marks it collected. Nothing to track.
- *   delivery   — Ben records a carrier and a tracking number, marks it
- *                dispatched, and the customer gets an email with the link.
+ * Email HTML is not web HTML. Outlook renders through Word, Gmail strips
+ * <style> blocks, and nothing supports flex or grid reliably. So: tables,
+ * inline styles, explicit widths. It looks dated because it has to be.
  *
- * The email sends ONCE. Re-marking an order does not re-send; there is an
- * explicit Resend action instead, so a mis-click cannot spam a customer.
+ * Images need ABSOLUTE urls, since a mail client has no origin to resolve
+ * /img against, so every builder takes the site origin.
  *
- * CHECK BEFORE LIVE: the tracking URL templates below are the public
- * consumer-facing ones. Confirm each against a real consignment number the
- * first time Ben uses that carrier — a wrong template sends the customer to
- * a dead page, which is worse than no link at all.
+ * No em dashes anywhere, per Mark.
  */
 
 export const CARRIERS = [
@@ -28,7 +24,6 @@ export const CARRIERS = [
 
 export const carrierById = Object.fromEntries(CARRIERS.map((c) => [c.id, c]));
 
-/** A link only if we have a template and a number, otherwise just the number. */
 export function trackingUrl(carrierId, number) {
   const c = carrierById[carrierId];
   const n = String(number || '').trim();
@@ -40,102 +35,298 @@ export function carrierName(carrierId) {
   return (carrierById[carrierId] || {}).name || '';
 }
 
+/* ── shared pieces ───────────────────────────────────────────────────────── */
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-const gbp = (p) => '£' + (Number(p || 0) / 100).toFixed(2);
+const gbp = (p) => '&pound;' + (Number(p || 0) / 100).toFixed(2);
 
-function itemRows(order) {
-  return (order.items || []).map((i) =>
-    `<tr><td style="padding:5px 0">${esc(i.name)} &times; ${i.quantity}</td>
-     <td align="right">${gbp(i.unit_amount * i.quantity)}</td></tr>`).join('');
+const INK = '#191C21';
+const COTTON = '#F3EDE1';
+const PEANUT = '#9A6C3E';
+const MUTED = '#7a746b';
+const LINE = '#e2dccf';
+const SANS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+function niceDate(iso) {
+  const d = new Date(iso || Date.now());
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-/** The order confirmation, sent the moment Teya confirms payment. */
-export function confirmationEmails(order, shopName, collectAddress) {
-  function orderRows(order) {
-  return (order.items || []).map((i) =>
-    `<tr><td style="padding:6px 0">${esc(i.name)} &times; ${i.quantity}</td>
-     <td align="right">${gbp(i.unit_amount * i.quantity)}</td></tr>`).join('');
+const abs = (origin, path) => {
+  const p = String(path || '');
+  if (!p) return '';
+  return /^https?:/i.test(p) ? p : String(origin || '').replace(/\/$/, '') + p;
+};
+
+/** Black band, mark in white. Blocked images still leave a black band. */
+function masthead(origin) {
+  return `<tr><td align="center" bgcolor="${INK}" style="background-color:${INK};padding:28px 20px">
+    <img src="${abs(origin, '/img/logo-d-white.png')}" width="56" height="56" alt="Drewrys"
+      style="display:block;border:0;outline:none;width:56px;height:56px">
+  </td></tr>`;
 }
 
-  function orderTable(order) {
-  return `<table style="width:100%;border-collapse:collapse;font-size:14px">
-    ${orderRows(order)}
-    <tr><td style="padding-top:10px">Subtotal</td><td align="right" style="padding-top:10px">${gbp(order.subtotal)}</td></tr>
-    ${order.discount ? `<tr><td>Discount${order.promo ? ' (' + esc(order.promo) + ')' : ''}</td><td align="right">&minus;${gbp(order.discount)}</td></tr>` : ''}
-    <tr><td>${order.fulfilment === 'collect' ? 'Collection'
-      : ('Delivery' + (order.method ? ' &mdash; ' + esc(order.method.name) : ''))}</td><td align="right">${order.shipping ? gbp(order.shipping) : 'Free'}</td></tr>
-    <tr><td style="padding-top:8px;font-weight:700">Total</td><td align="right" style="padding-top:8px;font-weight:700">${gbp(order.total)}</td></tr>
-  </table>`;
+function footNote(email) {
+  return `<tr><td style="padding:2px 28px 20px;font-family:${SANS};font-size:12.5px;
+    line-height:1.6;color:${MUTED}">For any customer service enquiries please get in touch at
+    <a href="mailto:${esc(email)}" style="color:${PEANUT};text-decoration:underline">${esc(email)}</a>.
+  </td></tr>`;
 }
+
+const ZONE_LABEL = { iom: 'Isle of Man', uk: 'UK', eu: 'Europe', collect: 'Collection' };
+
+/** How this order is going out, in a few words. */
+export function fulfilmentLabel(order) {
+  if (!order || order.fulfilment === 'collect') return 'Collection';
+  const zone = ZONE_LABEL[order.zone] || order.country || 'Delivery';
+  const method = (order.method || {}).name || '';
+  return method ? `${zone} ${method}` : zone;
+}
+
+function heading(text, pill) {
+  const tag = pill ? `<span style="display:inline-block;background-color:${INK};color:${COTTON};
+      border-radius:999px;padding:5px 13px;font-size:11.5px;font-weight:700;letter-spacing:.07em;
+      text-transform:uppercase;margin-left:10px;vertical-align:middle">${esc(pill)}</span>` : '';
+  return `<tr><td style="padding:30px 28px 2px;font-family:${SANS};font-size:13px;
+    font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${INK}">
+    <span style="vertical-align:middle">${esc(text)}</span>${tag}</td></tr>`;
+}
+
+function factRow(aLabel, aValue, bLabel, bValue) {
+  const cell = (l, v) => `<td width="50%" valign="top" style="font-family:${SANS};padding-right:14px">
+      <div style="font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+        color:${MUTED};padding-bottom:5px">${esc(l)}</div>
+      <div style="font-size:14.5px;color:${INK};line-height:1.55">${v}</div></td>`;
+  return `<tr><td style="padding:20px 28px 0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      ${cell(aLabel, aValue)}${bLabel ? cell(bLabel, bValue) : '<td width="50%"></td>'}
+    </tr></table></td></tr>`;
+}
+
+/** One product: shot on the left, name, size and quantity on the right. */
+function itemBlock(origin, item) {
+  const img = abs(origin, item.image);
+  return `<tr><td style="padding:22px 28px 0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td width="136" valign="top">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="124"><tr>
+          <td align="center" bgcolor="#f4f1ea" style="background-color:#f4f1ea;border-radius:12px;padding:12px">
+            ${img ? `<img src="${img}" width="100" alt="${esc(item.name)}"
+              style="display:block;border:0;outline:none;width:100px;max-width:100px;height:auto">`
+                  : '&nbsp;'}
+          </td></tr></table>
+      </td>
+      <td valign="top" style="font-family:${SANS}">
+        <div style="font-size:16.5px;font-weight:700;color:${INK};padding-bottom:4px">${esc(item.name)}</div>
+        ${item.size ? `<div style="font-size:12px;letter-spacing:.07em;text-transform:uppercase;
+          color:${PEANUT};font-weight:700;padding-bottom:9px">${esc(item.size)}</div>` : ''}
+        <div style="font-size:13.5px;color:${MUTED}">Quantity ${item.quantity}</div>
+        <div style="font-size:15px;color:${INK};font-weight:700;padding-top:4px">${gbp(item.unit_amount * item.quantity)}</div>
+      </td>
+    </tr></table></td></tr>`;
+}
+
+function totalsBlock(order) {
+  const line = (l, v, bold) => `<tr>
+    <td style="font-family:${SANS};font-size:${bold ? '16px' : '14px'};
+      color:${bold ? INK : MUTED};font-weight:${bold ? 700 : 400};padding:${bold ? '11px 0 0' : '6px 0 0'}">${l}</td>
+    <td align="right" style="font-family:${SANS};font-size:${bold ? '16px' : '14px'};
+      color:${bold ? INK : MUTED};font-weight:${bold ? 700 : 400};padding:${bold ? '11px 0 0' : '6px 0 0'}">${v}</td>
+  </tr>`;
   const collect = order.fulfilment === 'collect';
-  const addr = collectAddress || '';
-const cust = `<div style="font-family:system-ui,sans-serif;max-width:520px;color:#191C21">
-    <h2 style="font-weight:600">Thanks${order.customer?.name ? ', ' + esc(order.customer.name.split(' ')[0]) : ''}.</h2>
-    <p>We've got your order. Reference <b>${esc(order.reference)}</b>.</p>
-    ${orderTable(order)}
-    <p style="margin-top:18px">${collect
-      ? 'Ready to collect from the shop' + (addr ? ' &mdash; ' + esc(addr) : '') + '. We\'ll be in touch when it\'s ready.'
-      : 'We\'ll drop you a line when it\'s on its way.'}</p>
-    <p style="color:#6b6b6b;font-size:12px;margin-top:24px">Drewrys</p></div>`;
-const owner = `<div style="font-family:system-ui,sans-serif;max-width:520px">
-    <h2>New order ${esc(order.reference)}</h2>
-    ${orderTable(order)}
-    <p style="margin-top:14px"><b>${collect ? 'COLLECTION' : 'DELIVERY'}</b><br>
-    ${esc(order.customer?.name || '')}<br>${esc(order.customer?.email || '')}<br>
-    ${esc(order.customer?.phone || '')}<br>${esc(order.customer?.address || '')} ${esc(order.customer?.postcode || '')}</p></div>`;
-  return { customer: cust, owner };
+  return `<tr><td style="padding:28px 28px 0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr><td colspan="2" style="border-top:1px solid ${LINE};font-size:0;line-height:0">&nbsp;</td></tr>
+      <tr><td colspan="2" style="font-family:${SANS};font-size:13px;font-weight:700;
+        letter-spacing:.1em;text-transform:uppercase;color:${INK};padding:18px 0 4px">Summary</td></tr>
+      ${line('Subtotal', gbp(order.subtotal))}
+      ${order.discount ? line('Discount' + (order.promo ? ' (' + esc(order.promo) + ')' : ''),
+        '&minus;' + gbp(order.discount)) : ''}
+      ${line(collect ? 'Collection'
+        : 'Delivery' + (order.method ? ', ' + esc(order.method.name) : ''),
+        order.shipping ? gbp(order.shipping) : 'Free')}
+      ${line('Total', gbp(order.total), true)}
+    </table></td></tr>`;
 }
 
-/** Sent when a delivery order is marked dispatched. */
-export function dispatchedEmail(order, shopName) {
-  const first = (order.customer?.name || '').split(' ')[0];
-  const url = trackingUrl(order.carrier, order.tracking);
-  const cn = carrierName(order.carrier);
-  const addr = [order.customer?.line1, order.customer?.line2, order.customer?.city,
-                order.customer?.postcode, order.customer?.country].filter(Boolean);
+/** A filled panel, used wherever an address needs to stand out. */
+function panel(label, lines) {
+  return `<tr><td style="padding:20px 28px 0">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td bgcolor="${COTTON}" style="background-color:${COTTON};border-radius:12px;padding:16px 18px;
+        font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+          color:${PEANUT};padding-bottom:5px">${esc(label)}</div>
+        ${lines.map(esc).join('<br>')}
+      </td></tr></table></td></tr>`;
+}
 
-  return `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    max-width:520px;color:#191C21;line-height:1.55">
-    <h2 style="font-weight:600;margin:0 0 10px">It's on its way${first ? ', ' + esc(first) : ''}.</h2>
-    <p style="margin:0 0 14px">Your order <b>${esc(order.reference)}</b> has been dispatched.</p>
-    ${order.tracking ? `<div style="background:#ECE3D3;border-radius:12px;padding:14px 16px;margin:0 0 16px">
-      <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6f6a62">
-        ${esc(cn) || 'Tracking'}</p>
-      <p style="margin:0;font-size:16px;font-weight:650">${esc(order.tracking)}</p>
-      ${url ? `<p style="margin:10px 0 0"><a href="${url}" style="color:#9A6C3E;font-weight:600">Track your parcel</a></p>` : ''}
-    </div>` : ''}
-    ${addr.length ? `<p style="margin:0 0 14px;font-size:14px;color:#6f6a62">
-      Going to:<br>${addr.map(esc).join('<br>')}</p>` : ''}
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 14px">
-      ${itemRows(order)}
-      <tr><td style="padding-top:9px;font-weight:700">Total paid</td>
-          <td align="right" style="padding-top:9px;font-weight:700">${gbp(order.total)}</td></tr>
-    </table>
-    <p style="font-size:13px;color:#6f6a62;margin:0">Tracking can take a few hours to show
-    a first scan. If anything looks wrong, just reply to this email.</p>
-    <p style="color:#6f6a62;font-size:12px;margin-top:22px">${esc(shopName || 'Drewrys')}</p>
-  </div>`;
+function addressBlock(order, collectAddress) {
+  const c = order.customer || {};
+  const collect = order.fulfilment === 'collect';
+  const lines = collect
+    ? String(collectAddress || '').split(/\s*,\s*/).filter(Boolean)
+    : [c.line1, c.line2, c.city, c.postcode, c.country].filter(Boolean);
+  return factRow(
+    'Your details', [c.name, c.email].filter(Boolean).map(esc).join('<br>'),
+    collect ? 'Collect from' : 'Delivery address',
+    lines.length ? lines.map(esc).join('<br>') : '-',
+  );
+}
+
+function shell(rows) {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"></head>
+<body style="margin:0;padding:0;background-color:#EFEAE1">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background-color:#EFEAE1"><tr><td align="center" style="padding:24px 12px">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+    style="width:600px;max-width:600px;background-color:#ffffff;border-radius:14px;overflow:hidden">
+    ${rows}
+  </table>
+</td></tr></table></body></html>`;
+}
+
+/* ── the emails ──────────────────────────────────────────────────────────── */
+
+/** Order confirmation. Its only job is to confirm what was bought. */
+export function confirmationEmails(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const collect = order.fulfilment === 'collect';
+  const c = order.customer || {};
+
+  const collectLines = String(opts.collectAddress || '').split(/\s*,\s*/).filter(Boolean);
+
+  const customer = shell(`
+    ${masthead(origin)}
+    ${heading(collect ? 'Order confirmation' : 'Order confirmation')}
+    <tr><td style="padding:12px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Thanks${c.name ? ', ' + esc(String(c.name).split(' ')[0]) : ''}. We have your order and we are packing it now.
+    </td></tr>
+    ${collect ? `<tr><td style="padding:16px 28px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td bgcolor="${INK}" style="background-color:${INK};border-radius:12px;padding:18px 20px;
+          font-family:${SANS};color:${COTTON}">
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+            color:${PEANUT};padding-bottom:6px">Collection order</div>
+          <div style="font-size:16px;font-weight:700;line-height:1.45;padding-bottom:6px">
+            We will email you as soon as it is ready to collect.</div>
+          <div style="font-size:13.5px;line-height:1.55;color:#b8b1a6">
+            Please wait for that email before coming down.</div>
+        </td></tr></table></td></tr>` : ''}
+    ${factRow('Order number', esc(order.reference),
+              'Order date', esc(niceDate(order.settled || order.created)))}
+    ${collect && collectLines.length ? panel('Collecting from', collectLines) : ''}
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    ${totalsBlock(order)}
+    ${collect
+      ? factRow('Your details', [c.name, c.email].filter(Boolean).map(esc).join('<br>'), '', '')
+      : addressBlock(order, opts.collectAddress)}
+    <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
+      ${collect ? 'You will get a second email, headed Ready to collect, when it is packed.'
+                : 'We will email you again with tracking as soon as it leaves us.'}
+    </td></tr>
+    ${footNote(contact)}
+  `);
+
+  const owner = shell(`
+    ${masthead(origin)}
+    ${heading('New order', fulfilmentLabel(order))}
+    ${factRow('Order number', esc(order.reference), 'Total', `<b>${gbp(order.total)}</b>`)}
+    ${factRow(collect ? 'Collection' : 'Delivery',
+              collect ? 'In store' : esc((order.method || {}).name || 'Delivery'),
+              'Customer', [c.name, c.email, c.phone].filter(Boolean).map(esc).join('<br>'))}
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    ${totalsBlock(order)}
+    ${collect ? '' : factRow('Ship to',
+        [c.line1, c.line2, c.city, c.postcode, c.country].filter(Boolean).map(esc).join('<br>'), '', '')}
+  `);
+
+  return { customer, owner };
 }
 
 /** Sent when a collection order is marked ready. */
-export function readyEmail(order, shopName, collectAddress) {
-  const first = (order.customer?.name || '').split(' ')[0];
-  return `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-    max-width:520px;color:#191C21;line-height:1.55">
-    <h2 style="font-weight:600;margin:0 0 10px">Ready to collect${first ? ', ' + esc(first) : ''}.</h2>
-    <p style="margin:0 0 14px">Your order <b>${esc(order.reference)}</b> is packed and waiting.</p>
-    ${collectAddress ? `<div style="background:#ECE3D3;border-radius:12px;padding:14px 16px;margin:0 0 16px">
-      <p style="margin:0 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6f6a62">Collect from</p>
-      <p style="margin:0;font-size:15px;line-height:1.5">${collectAddress.split(/\s*,\s*/).map(esc).join('<br>')}</p>
-    </div>` : ''}
-    <table style="width:100%;border-collapse:collapse;font-size:14px;margin:0 0 14px">
-      ${itemRows(order)}
-      <tr><td style="padding-top:9px;font-weight:700">Total paid</td>
-          <td align="right" style="padding-top:9px;font-weight:700">${gbp(order.total)}</td></tr>
-    </table>
-    <p style="font-size:13px;color:#6f6a62;margin:0">Bring your order reference with you.</p>
-    <p style="color:#6f6a62;font-size:12px;margin-top:22px">${esc(shopName || 'Drewrys')}</p>
-  </div>`;
+export function readyEmail(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const addr = String(opts.collectAddress || '').split(/\s*,\s*/).filter(Boolean);
+
+  return shell(`
+    ${masthead(origin)}
+    ${heading('Ready to collect')}
+    <tr><td style="padding:14px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Your order is packed and waiting for you.
+    </td></tr>
+    ${addr.length ? panel('Collect from', addr) : ''}
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    ${totalsBlock(order)}
+    <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
+      Bring your order number, ${esc(order.reference)}, with you.
+    </td></tr>
+    ${footNote(contact)}
+  `);
+}
+
+/** Sent once the customer has actually collected. Closes the loop. */
+export function collectedEmail(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const c = order.customer || {};
+
+  return shell(`
+    ${masthead(origin)}
+    ${heading('Collected')}
+    <tr><td style="padding:14px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Thanks${c.name ? ', ' + esc(String(c.name).split(' ')[0]) : ''}. Your order has been collected.
+      Here is your receipt.
+    </td></tr>
+    ${factRow('Order number', esc(order.reference),
+              'Collected', esc(niceDate(order.fulfilled)))}
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    ${totalsBlock(order)}
+    <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
+      Keep this for your records. If anything is not right, just reply to this email.
+    </td></tr>
+    ${footNote(contact)}
+  `);
+}
+
+/** Sent when a delivery order is marked dispatched. */
+export function dispatchedEmail(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const c = order.customer || {};
+  const url = trackingUrl(order.carrier, order.tracking);
+  const cn = carrierName(order.carrier);
+
+  return shell(`
+    ${masthead(origin)}
+    ${heading('On its way')}
+    <tr><td style="padding:14px 28px 0;font-family:${SANS};font-size:15px;line-height:1.6;color:${INK}">
+      Your order has left us${cn ? ' with ' + esc(cn) : ''}.
+    </td></tr>
+    ${order.tracking ? `<tr><td style="padding:18px 28px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td bgcolor="${COTTON}" style="background-color:${COTTON};border-radius:12px;padding:16px 18px;
+          font-family:${SANS}">
+          <div style="font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+            color:${PEANUT};padding-bottom:5px">${esc(cn) || 'Tracking'}</div>
+          <div style="font-size:17px;font-weight:700;color:${INK};letter-spacing:.02em">${esc(order.tracking)}</div>
+          ${url ? `<div style="padding-top:11px"><a href="${url}"
+            style="color:${PEANUT};font-size:14px;font-weight:700;text-decoration:underline">Track your parcel</a></div>` : ''}
+        </td></tr></table></td></tr>` : ''}
+    ${factRow('Going to',
+      [c.line1, c.line2, c.city, c.postcode, c.country].filter(Boolean).map(esc).join('<br>'), '', '')}
+    ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
+    ${totalsBlock(order)}
+    <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
+      Tracking can take a few hours to show its first scan.
+    </td></tr>
+    ${footNote(contact)}
+  `);
 }

@@ -1,5 +1,5 @@
 /**
- * Drewrys — storefront Worker.
+ * Drewrys - storefront Worker.
  *
  *   /                    the site: shell.html from ASSETS with the live
  *                        catalogue injected before </head>
@@ -9,7 +9,7 @@
  *   /admin               PIN-gated portal: Catalogue · Stock · Orders
  *   everything else      static asset
  *
- * The page is public/shell.html on purpose — see the note in wrangler.toml.
+ * The page is public/shell.html on purpose - see the note in wrangler.toml.
  */
 
 import {
@@ -19,7 +19,8 @@ import {
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
 import { COUNTRIES } from './countries.js';
-import { CARRIERS, confirmationEmails, dispatchedEmail, readyEmail } from './fulfilment.js';
+import { CARRIERS, confirmationEmails, dispatchedEmail, readyEmail,
+         collectedEmail } from './fulfilment.js';
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
@@ -132,11 +133,14 @@ async function sendEmail(env, { to, subject, html: bodyHtml }) {
 async function sendOrderEmails(env, order) {
   const settings = await getSettings(env);
   const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
-  const { customer, owner } = confirmationEmails(order, env.SHOP_NAME, addr);
+  const { customer, owner } = confirmationEmails(order, {
+    origin: env.SITE_ORIGIN, collectAddress: addr,
+    contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+  });
   await sendEmail(env, { to: order.customer?.email,
     subject: `Drewrys order ${order.reference}`, html: customer });
   await sendEmail(env, { to: env.SHOP_ORDER_EMAIL,
-    subject: `New order ${order.reference} — ${gbp(order.total)}`, html: owner });
+    subject: `New order ${order.reference} - ${gbp(order.total)}`, html: owner });
 }
 
 async function handleWebhook(request, env, ctx) {
@@ -211,7 +215,7 @@ async function recentOrders(env) {
  * never re-sends. Resend is explicit. Undo steps back one stage and clears
  * that stage's flag so a corrected mistake does email properly.
  */
-const STAGE_EMAIL = { ready: 'ready', dispatched: 'dispatched' };
+const STAGE_EMAIL = { ready: 'ready', collected: 'collected', dispatched: 'dispatched' };
 
 async function fulfilOrder(env, body) {
   const ref = String(body.reference || '').slice(0, 40);
@@ -255,14 +259,18 @@ async function fulfilOrder(env, body) {
   if (wants && order.customer?.email) {
     const settings = await getSettings(env);
     const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
-    const isReady = order.status === 'ready';
+    const opts = { origin: env.SITE_ORIGIN, collectAddress: addr,
+      contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL };
+    const byStage = {
+      ready: { subject: `Your Drewrys order ${ref} is ready to collect`,
+               html: () => readyEmail(order, opts) },
+      collected: { subject: `Your Drewrys order ${ref} - collected`,
+                   html: () => collectedEmail(order, opts) },
+      dispatched: { subject: `Your Drewrys order ${ref} is on its way`,
+                    html: () => dispatchedEmail(order, opts) },
+    }[order.status];
     const ok = await sendEmail(env, {
-      to: order.customer.email,
-      subject: isReady
-        ? `Your Drewrys order ${ref} is ready to collect`
-        : `Your Drewrys order ${ref} is on its way`,
-      html: isReady ? readyEmail(order, env.SHOP_NAME, addr)
-                    : dispatchedEmail(order, env.SHOP_NAME),
+      to: order.customer.email, subject: byStage.subject, html: byStage.html(),
     });
     if (ok) {
       order.notified[stage] = new Date().toISOString();

@@ -2,7 +2,7 @@
  * Postcode → address lookup.
  *
  * Covers the Isle of Man and the UK (Royal Mail PAF, which includes the IM
- * postcode area). Europe falls back to typing it out, which is fine — it is
+ * postcode area). Europe falls back to typing it out, which is fine - it is
  * the smallest share of orders and no UK-postcode service covers it anyway.
  *
  * The API key lives in the Worker, never the browser: a key in client-side
@@ -71,7 +71,7 @@ export async function lookupPostcode(request, env, url) {
     return json({ error: 'No addresses found for that postcode.', addresses: [] }, 404);
   }
   if (!res.ok) {
-    // 402 is an exhausted balance. Log it loudly — the shop still works, but
+    // 402 is an exhausted balance. Log it loudly - the shop still works, but
     // nobody would otherwise notice the lookups had quietly stopped.
     console.error('address lookup failed', res.status, JSON.stringify(data).slice(0, 300));
     return json({ error: 'Lookup is unavailable, please type your address.', addresses: [] }, 502);

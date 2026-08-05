@@ -1,4 +1,4 @@
-// Seed catalogue. Used only while the KV `catalogue` key is empty — the
+// Seed catalogue. Used only while the KV `catalogue` key is empty - the
 // first save from /admin writes to KV and this stops being consulted.
 // Generated from the site build; prices cross-checked against checkout.
 export const DEFAULT_CATALOGUE = {
