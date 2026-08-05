@@ -77,7 +77,7 @@ async function getAccessToken(env, force = false) {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.access_token) {
       // Never log the secret. Status and any error code only.
-      console.error('teya token failed', res.status, data.error || '');
+      console.error('teya token failed', res.status, tokenUrl(env), data.error || '');
       throw new Error('teya auth failed');
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
@@ -320,11 +320,21 @@ export async function createSession(request, env) {
     cancel_url: `${origin}/?cancelled=1&ref=${reference}`,
   };
 
-  const res = await teyaFetch(env, '/v2/checkout/sessions', {
-    method: 'POST',
-    headers: { 'Idempotency-Key': reference },
-    body: JSON.stringify(body),
-  });
+  // getAccessToken THROWS when the token exchange fails, and an uncaught throw
+  // here escapes the Worker and Cloudflare answers with an HTML error page - so
+  // the browser gets "Unexpected token '<'" instead of a usable message. Catch
+  // it and answer in JSON like every other failure on this path.
+  let res;
+  try {
+    res = await teyaFetch(env, '/v2/checkout/sessions', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': reference },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.error('teya request threw', String(e && e.message || e));
+    return json({ error: 'payment setup failed' }, 502);
+  }
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -349,8 +359,14 @@ export async function createSession(request, env) {
  */
 export async function getSessionStatus(env, sessionId) {
   if (!paymentsConfigured(env) || !sessionId) return null;
-  const res = await teyaFetch(env, `/v2/checkout/sessions/${encodeURIComponent(sessionId)}`,
-                              { method: 'GET' });
+  let res;
+  try {
+    res = await teyaFetch(env, `/v2/checkout/sessions/${encodeURIComponent(sessionId)}`,
+                          { method: 'GET' });
+  } catch (e) {
+    console.error('teya status threw', String(e && e.message || e));
+    return null;
+  }
   if (!res.ok) {
     console.error('teya session status failed', res.status);
     return null;
