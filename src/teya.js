@@ -41,10 +41,37 @@ const API = {
 let _token = null;          // { value, expires }
 let _tokenInFlight = null;  // single-flight guard
 
+/**
+ * Candidate token endpoints, tried in order until one answers with a token.
+ *
+ * Both hosts returned a bare 403 with no OAuth error body for /oauth2/token,
+ * which is what a gateway does for a path it does not know rather than what an
+ * OAuth server does for bad credentials - so the path, not the credential, is
+ * the thing in doubt. TEYA_TOKEN_URL short-circuits all of this the moment Teya
+ * tell us the real one.
+ */
+function tokenCandidates(env) {
+  if (env.TEYA_TOKEN_URL) return [env.TEYA_TOKEN_URL];
+  const prod = env.TEYA_ENV === 'production';
+  const api = API[prod ? 'production' : 'staging'];
+  const host = prod ? 'teya.com' : 'teya.xyz';
+  return [
+    // Confirmed from Teya's own API URLs table 05/08/2026. OAuth lives on a
+    // SEPARATE host from the payments API, which is why every path under
+    // api.teya.com returned a bare 403 - the gateway there has no token
+    // endpoint to refuse properly.
+    `https://id.${host}/oauth/v2/oauth-token`,
+    `${api}/oauth2/token`,
+    `${api}/oauth/token`,
+    `${api}/v2/oauth/token`,
+  ];
+}
+
+// Remembered once found, so the probing happens at most once per isolate.
+let _tokenUrlFound = null;
+
 function tokenUrl(env) {
-  if (env.TEYA_TOKEN_URL) return env.TEYA_TOKEN_URL;
-  const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
-  return `${base}/oauth2/token`;
+  return _tokenUrlFound || tokenCandidates(env)[0];
 }
 
 /**
@@ -68,7 +95,7 @@ async function getAccessToken(env, force = false) {
     const form = new URLSearchParams({ grant_type: 'client_credentials' });
     if (env.TEYA_SCOPE) form.set('scope', env.TEYA_SCOPE);
 
-    const attempt = async (useBasic) => {
+    const attempt = async (url, useBasic) => {
       const body = new URLSearchParams(form);
       const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
       if (useBasic) {
@@ -78,21 +105,32 @@ async function getAccessToken(env, force = false) {
         body.set('client_id', env.TEYA_CLIENT_ID);
         body.set('client_secret', env.TEYA_CLIENT_SECRET);
       }
-      const r = await fetch(tokenUrl(env), { method: 'POST', headers, body: body.toString() });
+      const r = await fetch(url, { method: 'POST', headers, body: body.toString() });
       return { r, data: await r.json().catch(() => ({})) };
     };
 
-    let { r: res, data } = await attempt(false);
-    if ((res.status === 401 || res.status === 403) && !data.access_token) {
-      console.error('teya token body-auth rejected', res.status, '- retrying as HTTP Basic');
-      ({ r: res, data } = await attempt(true));
+    const urls = _tokenUrlFound ? [_tokenUrlFound] : tokenCandidates(env);
+    let res = null; let data = {}; let winner = null;
+
+    for (const url of urls) {
+      ({ r: res, data } = await attempt(url, false));
+      if (!data.access_token && (res.status === 401 || res.status === 403)) {
+        ({ r: res, data } = await attempt(url, true));
+      }
+      if (data.access_token) { winner = url; break; }
+      // A bare 403 or 404 with no OAuth error body means wrong path, so move on.
+      // Anything else is the server talking to us and is worth reporting.
+      console.error('teya token', res.status, url,
+                    data.error || '', String(data.error_description || '').slice(0, 160));
+      if (data.error) break;   // a real OAuth rejection: stop, the path is right
     }
 
-    if (!res.ok || !data.access_token) {
-      // Never log the secret. Status, endpoint and any error code only.
-      console.error('teya token failed', res.status, tokenUrl(env),
-                    data.error || '', String(data.error_description || '').slice(0, 200));
+    if (!winner) {
       throw new Error('teya auth failed');
+    }
+    if (!_tokenUrlFound) {
+      _tokenUrlFound = winner;
+      console.log('teya token endpoint resolved:', winner);
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
     _token = { value: data.access_token, expires: Date.now() + ttl };
