@@ -7,9 +7,23 @@
  * renders from. Ben editing a price in /admin therefore changes the shop and
  * the charge in one move - they cannot drift apart.
  *
- * UNVERIFIED until staging credentials exist: the exact request field names,
- * whether Authorization is Bearer or Basic, and the webhook signature header.
- * All three are isolated below so they are one-line changes.
+ * AUTH, corrected 05/08/2026. Teya issues a client id and secret and expects
+ * an OAuth client_credentials exchange for a short-lived bearer token, not a
+ * static API key. Source: the Teya WooCommerce plugin changelog, which also
+ * documents the failure modes worth copying - retry once on a 401 with a fresh
+ * token, and single-flight the refresh so concurrent requests do not stampede
+ * the token endpoint. TEYA_API_KEY still works as a static bearer if that is
+ * what the portal actually issues, so the wrong guess does not break anything.
+ *
+ * WEBHOOKS, corrected the same day. Teya signs with a PUBLIC KEY verified
+ * against the raw body, not an HMAC shared secret. verifySignature now detects
+ * which it has been given, so setting TEYA_WEBHOOK_SECRET to a PEM public key
+ * switches modes with no change in index.js.
+ *
+ * STILL UNVERIFIED, because docs.teya.com is JavaScript-rendered and cannot be
+ * read: the token endpoint path, the signature header name, and the exact
+ * request field names. Each is a single env var below rather than a guess baked
+ * into the code.
  */
 
 import { DEFAULT_CATALOGUE } from './catalogue-default.js';
@@ -21,6 +35,95 @@ const API = {
   staging: 'https://api.teya.xyz',
   production: 'https://api.teya.com',
 };
+
+// Cached per isolate. Workers reuse an isolate across requests, so this saves a
+// token round trip on most calls without ever persisting a credential.
+let _token = null;          // { value, expires }
+let _tokenInFlight = null;  // single-flight guard
+
+function tokenUrl(env) {
+  if (env.TEYA_TOKEN_URL) return env.TEYA_TOKEN_URL;
+  const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
+  return `${base}/oauth2/token`;
+}
+
+/**
+ * A bearer token for the Teya API.
+ *
+ * force=true discards a cached token, which is what the 401 retry uses: a token
+ * can be revoked before its stated TTL by a key rotation or clock skew, and the
+ * expiry alone will not tell you.
+ */
+async function getAccessToken(env, force = false) {
+  const now = Date.now();
+  if (!force && _token && _token.expires > now + 30000) return _token.value;
+
+  // Collapse concurrent callers onto one exchange.
+  if (!force && _tokenInFlight) return _tokenInFlight;
+
+  _tokenInFlight = (async () => {
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: env.TEYA_CLIENT_ID,
+      client_secret: env.TEYA_CLIENT_SECRET,
+    });
+    if (env.TEYA_SCOPE) body.set('scope', env.TEYA_SCOPE);
+
+    const res = await fetch(tokenUrl(env), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.access_token) {
+      // Never log the secret. Status and any error code only.
+      console.error('teya token failed', res.status, data.error || '');
+      throw new Error('teya auth failed');
+    }
+    const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
+    _token = { value: data.access_token, expires: Date.now() + ttl };
+    return _token.value;
+  })();
+
+  try { return await _tokenInFlight; }
+  finally { _tokenInFlight = null; }
+}
+
+/**
+ * Authorization header value. Prefers the OAuth exchange; falls back to a
+ * static bearer when only TEYA_API_KEY is set, so whichever credential shape
+ * the portal issues, one of the two paths works.
+ */
+async function authHeader(env, force = false) {
+  if (env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) {
+    return `Bearer ${await getAccessToken(env, force)}`;
+  }
+  return `Bearer ${env.TEYA_API_KEY}`;
+}
+
+function paymentsConfigured(env) {
+  const hasAuth = (env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) || env.TEYA_API_KEY;
+  return Boolean(hasAuth && env.TEYA_STORE_ID);
+}
+
+/** Call the Teya API, retrying once on a 401 with a freshly minted token. */
+async function teyaFetch(env, path, init = {}) {
+  const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
+  const send = async (force) => fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers || {}),
+      'Authorization': await authHeader(env, force),
+      'Content-Type': 'application/json',
+    },
+  });
+
+  let res = await send(false);
+  if (res.status === 401 && env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) {
+    res = await send(true);
+  }
+  return res;
+}
 
 export const DEFAULT_SETTINGS = {
   zones: DEFAULT_ZONES,
@@ -194,7 +297,7 @@ export async function createSession(request, env) {
   const customer = readCustomer(payload, basket.fulfilment);
   if (customer.error) return json({ error: customer.error }, 400);
 
-  if (!env.TEYA_API_KEY || !env.TEYA_STORE_ID) {
+  if (!paymentsConfigured(env)) {
     return json({ error: 'payments not configured' }, 503);
   }
 
@@ -217,15 +320,9 @@ export async function createSession(request, env) {
     cancel_url: `${origin}/?cancelled=1&ref=${reference}`,
   };
 
-  const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
-  const res = await fetch(`${base}/v2/checkout/sessions`, {
+  const res = await teyaFetch(env, '/v2/checkout/sessions', {
     method: 'POST',
-    headers: {
-      // CHECK against the credential Ben generates - may be Basic.
-      'Authorization': `Bearer ${env.TEYA_API_KEY}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': reference,
-    },
+    headers: { 'Idempotency-Key': reference },
     body: JSON.stringify(body),
   });
 
@@ -244,9 +341,93 @@ export async function createSession(request, env) {
   return json({ url, reference, total: basket.total });
 }
 
+/**
+ * Status of a checkout session, for reconciling an order whose webhook never
+ * arrived. Treats a payment as paid only when the status says success AND a
+ * transaction id is present - the Teya plugin shipped a fix for exactly this,
+ * having marked declined sessions paid on status alone.
+ */
+export async function getSessionStatus(env, sessionId) {
+  if (!paymentsConfigured(env) || !sessionId) return null;
+  const res = await teyaFetch(env, `/v2/checkout/sessions/${encodeURIComponent(sessionId)}`,
+                              { method: 'GET' });
+  if (!res.ok) {
+    console.error('teya session status failed', res.status);
+    return null;
+  }
+  const data = await res.json().catch(() => ({}));
+  const status = String(data.payment_status || data.status || '').toUpperCase();
+  const txn = data.transaction_id || data.transactionId ||
+              (data.payment && (data.payment.transaction_id || data.payment.id)) || '';
+  return { raw: data, status, transaction_id: txn, paid: status === 'SUCCESS' && Boolean(txn) };
+}
+
+// ── Webhook signature ────────────────────────────────────────────────────
+
+const _b64ToBytes = (b64) => {
+  const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+};
+
+const _hexToBytes = (hex) => {
+  const clean = hex.replace(/^sha256=/, '').trim();
+  const out = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(clean.substr(i * 2, 2), 16);
+  return out;
+};
+
+/** Signatures arrive base64 or hex depending on the provider. Accept both. */
+function _sigBytes(sig) {
+  const s = String(sig || '').replace(/^sha256=/, '').trim();
+  if (/^[0-9a-fA-F]+$/.test(s) && s.length % 2 === 0) return _hexToBytes(s);
+  try { return _b64ToBytes(s); } catch { return null; }
+}
+
+function _pemToBytes(pem) {
+  const body = pem.replace(/-----[A-Z ]+-----/g, '').replace(/\s+/g, '');
+  return _b64ToBytes(body);
+}
+
+/**
+ * Verify against a PUBLIC KEY. Teya signs the raw body; the key is published in
+ * the Business Portal. Tries RSA SHA-256 then Ed25519 rather than asking anyone
+ * to know which, because the docs page cannot be read.
+ */
+async function verifyWithPublicKey(raw, sig, pem) {
+  const sigBytes = _sigBytes(sig);
+  if (!sigBytes) return false;
+  const keyBytes = _pemToBytes(pem);
+  const data = new TextEncoder().encode(raw);
+
+  const attempts = [
+    { alg: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, verify: 'RSASSA-PKCS1-v1_5' },
+    { alg: { name: 'RSA-PSS', hash: 'SHA-256' }, verify: { name: 'RSA-PSS', saltLength: 32 } },
+    { alg: { name: 'Ed25519' }, verify: 'Ed25519' },
+  ];
+  for (const a of attempts) {
+    try {
+      const key = await crypto.subtle.importKey('spki', keyBytes, a.alg, false, ['verify']);
+      if (await crypto.subtle.verify(a.verify, key, sigBytes, data)) return true;
+    } catch { /* wrong algorithm for this key, try the next */ }
+  }
+  return false;
+}
+
+/**
+ * Kept at three arguments so index.js needs no change. The third value decides
+ * the mode: a PEM public key means asymmetric verification, anything else is
+ * treated as an HMAC shared secret.
+ */
 export async function verifySignature(raw, sig, secret) {
   if (!secret) return true; // not configured yet - do not hard-fail staging
   if (!sig) return false;
+
+  if (/BEGIN [A-Z ]*PUBLIC KEY/.test(secret)) {
+    return verifyWithPublicKey(raw, sig, secret);
+  }
+
   const key = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(secret),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
