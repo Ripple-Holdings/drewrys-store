@@ -92,8 +92,12 @@ async function getAccessToken(env, force = false) {
     // OAuth allows the client credentials either in the form body or as HTTP
     // Basic, and servers differ on which they accept. Try the body first, then
     // Basic on a 401 or 403, rather than making the choice a guess.
+    // Documented 05/08/2026: the grant must request checkout/sessions/create or
+    // the token mints fine and every API call returns 403 "token has no scopes
+    // defined". Defaulted so no environment variable is needed; TEYA_SCOPE
+    // overrides it if more scopes are ever required.
     const form = new URLSearchParams({ grant_type: 'client_credentials' });
-    if (env.TEYA_SCOPE) form.set('scope', env.TEYA_SCOPE);
+    form.set('scope', env.TEYA_SCOPE || 'checkout/sessions/create');
 
     const attempt = async (url, useBasic) => {
       const body = new URLSearchParams(form);
@@ -363,11 +367,20 @@ export async function createSession(request, env) {
     customer: customer.value,
   }), { expirationTtl: 60 * 60 * 24 * 90 });
 
+  // Field names taken from Teya's own worked example, 05/08/2026. The line item
+  // keys are `description` and `unit_price`, NOT the name/unit_amount I had
+  // guessed, and `type` is required. There is no documented reference field, so
+  // our own reference travels on the return URLs and via the Idempotency-Key,
+  // and the session id is mapped back to it in KV once Teya answers.
   const body = {
     store_id: env.TEYA_STORE_ID,
     amount: { value: basket.total, currency: 'GBP' },
-    reference,
-    line_items: basket.items.map(({ name, quantity, unit_amount }) => ({ name, quantity, unit_amount })),
+    type: 'SALE',
+    line_items: basket.items.map(({ name, quantity, unit_amount }) => ({
+      description: name,
+      quantity,
+      unit_price: unit_amount,
+    })),
     success_url: `${origin}/?paid=1&ref=${reference}`,
     cancel_url: `${origin}/?cancelled=1&ref=${reference}`,
   };
@@ -394,13 +407,36 @@ export async function createSession(request, env) {
     return json({ error: 'payment setup failed' }, 502);
   }
 
-  const url = data.checkout_url || data.url || data.redirect_url;
+  // Documented response: session_id, session_token, session_url, session_status.
+  // The older keys are kept as a fallback in case the field is ever renamed.
+  const url = data.session_url || data.checkout_url || data.url || data.redirect_url;
   if (!url) {
-    console.error('no redirect url from teya', JSON.stringify(data));
+    console.error('no session url from teya', JSON.stringify(data).slice(0, 400));
     return json({ error: 'payment setup failed' }, 502);
   }
 
-  return json({ url, reference, total: basket.total });
+  // The webhook and any later status check identify the payment by session id,
+  // so store the mapping both ways. Without it a callback carrying only a
+  // session id has no way back to our order.
+  const sessionId = data.session_id || '';
+  if (sessionId) {
+    try {
+      await env.DREWRYS_KV.put(`session:${sessionId}`, reference,
+                               { expirationTtl: 60 * 60 * 24 * 90 });
+      const parked = await env.DREWRYS_KV.get(`order:${reference}`);
+      if (parked) {
+        const o = JSON.parse(parked);
+        o.session_id = sessionId;
+        await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify(o),
+                                 { expirationTtl: 60 * 60 * 24 * 90 });
+      }
+    } catch (e) {
+      // Not fatal: the return URL still carries the reference.
+      console.error('session mapping failed', String(e && e.message || e));
+    }
+  }
+
+  return json({ url, reference, session_id: sessionId, total: basket.total });
 }
 
 /**
@@ -424,7 +460,9 @@ export async function getSessionStatus(env, sessionId) {
     return null;
   }
   const data = await res.json().catch(() => ({}));
-  const status = String(data.payment_status || data.status || '').toUpperCase();
+  // Documented fields are payment_status and session_status; payment_status is
+  // the one that says whether money moved.
+  const status = String(data.payment_status || data.session_status || data.status || '').toUpperCase();
   const txn = data.transaction_id || data.transactionId ||
               (data.payment && (data.payment.transaction_id || data.payment.id)) || '';
   return { raw: data, status, transaction_id: txn, paid: status === 'SUCCESS' && Boolean(txn) };
