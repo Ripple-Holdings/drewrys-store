@@ -67,11 +67,17 @@ function tokenCandidates(env) {
   ];
 }
 
-// Remembered once found, so the probing happens at most once per isolate.
-let _tokenUrlFound = null;
+// Remembered once found, so the probing happens at most once per isolate. Keyed
+// by environment: a cached staging URL must not survive a switch to production
+// inside a warm isolate.
+const _tokenUrlFound = {};
+
+function envKey(env) {
+  return env.TEYA_ENV === 'production' ? 'production' : 'staging';
+}
 
 function tokenUrl(env) {
-  return _tokenUrlFound || tokenCandidates(env)[0];
+  return _tokenUrlFound[envKey(env)] || tokenCandidates(env)[0];
 }
 
 /**
@@ -113,7 +119,8 @@ async function getAccessToken(env, force = false) {
       return { r, data: await r.json().catch(() => ({})) };
     };
 
-    const urls = _tokenUrlFound ? [_tokenUrlFound] : tokenCandidates(env);
+    const cached = _tokenUrlFound[envKey(env)];
+    const urls = cached ? [cached] : tokenCandidates(env);
     let res = null; let data = {}; let winner = null;
 
     for (const url of urls) {
@@ -132,9 +139,9 @@ async function getAccessToken(env, force = false) {
     if (!winner) {
       throw new Error('teya auth failed');
     }
-    if (!_tokenUrlFound) {
-      _tokenUrlFound = winner;
-      console.log('teya token endpoint resolved:', winner);
+    if (_tokenUrlFound[envKey(env)] !== winner) {
+      _tokenUrlFound[envKey(env)] = winner;
+      console.log('teya token endpoint resolved:', winner, 'env', envKey(env));
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
     _token = { value: data.access_token, expires: Date.now() + ttl };
