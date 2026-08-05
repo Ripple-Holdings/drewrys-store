@@ -62,22 +62,36 @@ async function getAccessToken(env, force = false) {
   if (!force && _tokenInFlight) return _tokenInFlight;
 
   _tokenInFlight = (async () => {
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: env.TEYA_CLIENT_ID,
-      client_secret: env.TEYA_CLIENT_SECRET,
-    });
-    if (env.TEYA_SCOPE) body.set('scope', env.TEYA_SCOPE);
+    // OAuth allows the client credentials either in the form body or as HTTP
+    // Basic, and servers differ on which they accept. Try the body first, then
+    // Basic on a 401 or 403, rather than making the choice a guess.
+    const form = new URLSearchParams({ grant_type: 'client_credentials' });
+    if (env.TEYA_SCOPE) form.set('scope', env.TEYA_SCOPE);
 
-    const res = await fetch(tokenUrl(env), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-    const data = await res.json().catch(() => ({}));
+    const attempt = async (useBasic) => {
+      const body = new URLSearchParams(form);
+      const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      if (useBasic) {
+        headers.Authorization = 'Basic ' +
+          btoa(`${env.TEYA_CLIENT_ID}:${env.TEYA_CLIENT_SECRET}`);
+      } else {
+        body.set('client_id', env.TEYA_CLIENT_ID);
+        body.set('client_secret', env.TEYA_CLIENT_SECRET);
+      }
+      const r = await fetch(tokenUrl(env), { method: 'POST', headers, body: body.toString() });
+      return { r, data: await r.json().catch(() => ({})) };
+    };
+
+    let { r: res, data } = await attempt(false);
+    if ((res.status === 401 || res.status === 403) && !data.access_token) {
+      console.error('teya token body-auth rejected', res.status, '- retrying as HTTP Basic');
+      ({ r: res, data } = await attempt(true));
+    }
+
     if (!res.ok || !data.access_token) {
-      // Never log the secret. Status and any error code only.
-      console.error('teya token failed', res.status, tokenUrl(env), data.error || '');
+      // Never log the secret. Status, endpoint and any error code only.
+      console.error('teya token failed', res.status, tokenUrl(env),
+                    data.error || '', String(data.error_description || '').slice(0, 200));
       throw new Error('teya auth failed');
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
