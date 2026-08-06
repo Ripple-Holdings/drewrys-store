@@ -27,6 +27,7 @@ import { REVIEW_DEFAULTS, livePlatforms, newToken, reviewId, queueReviewRequest,
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
+import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -182,6 +183,7 @@ async function handleWebhook(request, env, ctx) {
     await pushRecent(env, reference);
     ctx.waitUntil(decrementStock(env, order));
     ctx.waitUntil(sendOrderEmails(env, order));
+    ctx.waitUntil(mirrorOrder(env, order));      // reporting copy, best effort
   }
   return new Response('ok', { status: 200 });
 }
@@ -481,6 +483,17 @@ async function handleAdmin(request, env, url) {
     return html(GATE, 401);
   }
 
+  // Dashboard figures. Same auth as the rest of the admin, so there is only
+  // ever one way in.
+  const report = url.searchParams.get('report');
+  if (report) {
+    return json(await dashboardData(
+      env, report,
+      url.searchParams.get('sales') || 'day',
+      url.searchParams.get('visitors') || 'daily',
+    ));
+  }
+
   if (request.method === 'POST') {
     const body = await request.json().catch(() => null);
     if (!body) return json({ error: 'bad json' }, 400);
@@ -612,6 +625,8 @@ export default {
       try {
         const r = await sendDueReviewRequests(env);
         console.log('review requests', JSON.stringify(r));
+        const rep = await rollupAndPrune(env);
+        console.log('reporting rollup', JSON.stringify(rep));
       } catch (e) { console.error('cron failed', e); }
     })());
   },
@@ -619,6 +634,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (request.method === 'GET') ctx.waitUntil(recordHit(request, env, path));
     try {
       if (path === '/' || path === '/index.html') return renderSite(request, env);
       if (path === '/checkout') return renderCheckout(env);

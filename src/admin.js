@@ -13,6 +13,8 @@
  *     product does not need a commit to the repo.
  */
 
+import { DASH_CSS, DASH_JS } from './dashboard.js';
+
 export const GATE = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drewrys · Admin</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
@@ -201,6 +203,7 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
   background:var(--ink);color:var(--cotton);padding:12px 20px;border-radius:11px;
   font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
+${DASH_CSS}
 </style></head><body>
 <header>
   <img src="/img/logo-d.png" alt="Drewrys">
@@ -208,7 +211,8 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
   <button id="lock">Lock</button>
 </header>
 <nav>
-  <button data-tab="catalogue" aria-selected="true">Catalogue</button>
+  <button data-tab="dashboard" aria-selected="true">Dashboard</button>
+  <button data-tab="catalogue" aria-selected="false">Catalogue</button>
   <button data-tab="ingredients" aria-selected="false">Ingredients</button>
   <button data-tab="stock" aria-selected="false">Stock</button>
   <button data-tab="delivery" aria-selected="false">Delivery</button>
@@ -228,7 +232,7 @@ var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
-var tab='catalogue', openCard=null, orderView='todo', revView='pending';
+var tab='dashboard', openCard=null, orderView='todo', revView='pending';
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -279,6 +283,16 @@ function imgFor(p){ return uploads[p.slug] || p.image || '/img/favicon.png'; }
 
 function render(){
   var m=document.getElementById('main'), h='';
+
+  // The dashboard has nothing to save, so the savebar comes off entirely
+  // rather than sitting there reading "No unsaved changes".
+  document.getElementById('savebar').hidden = (tab==='dashboard');
+
+  if(tab==='dashboard'){
+    m.innerHTML=renderDash();
+    wireDash();
+    return;
+  }
 
   if(tab==='catalogue'){
     h+='<button class="addnew" id="addnew">+ Add a product</button>';
@@ -811,6 +825,11 @@ document.addEventListener('input',function(e){
   refreshBar();
 });
 
+function goTab(name){
+  var b=document.querySelector('nav button[data-tab="'+name+'"]');
+  if(b) b.click();
+}
+
 document.querySelectorAll('nav button').forEach(function(b){
   b.addEventListener('click',function(){
     tab=b.dataset.tab; openCard=null;
@@ -851,6 +870,9 @@ document.getElementById('lock').addEventListener('click',function(){
 window.addEventListener('beforeunload',function(e){
   if(dirtyCount()){ e.preventDefault(); e.returnValue=''; }
 });
+${DASH_JS}
+
 render();
+loadReport();
 </script></body></html>`;
 }
