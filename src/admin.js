@@ -191,7 +191,10 @@ td,th{text-align:left;padding:7px 6px;border-bottom:1px solid #f0e9dc}
 th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
 .savebar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:var(--cotton);
-  padding:12px 18px;display:flex;align-items:center;gap:11px}
+  padding:12px 18px;display:flex;align-items:center;gap:11px;
+  animation:sbup .18s ease-out}
+@keyframes sbup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.savebar[hidden]{display:none!important}
 .savebar .sp.clean{color:#9a948a}
 .savebar .disc[hidden]{display:none}
 .savebar .sp{flex:1;font-size:14px}
@@ -220,7 +223,7 @@ ${DASH_CSS}
   <button data-tab="reviews" aria-selected="false">Reviews</button>
 </nav>
 <main id="main"></main>
-<div class="savebar" id="savebar"><span class="sp" id="dirty"></span>
+<div class="savebar" id="savebar" hidden><span class="sp" id="dirty"></span>
   <button class="disc" id="discard">Discard</button>
   <button class="save" id="save">Save changes</button></div>
 <div class="toast" id="toast"></div>
@@ -265,9 +268,13 @@ function dirtyCount(){
 function refreshBar(){
   var n=dirtyCount();
   var lbl=document.getElementById('dirty');
-  lbl.textContent = n ? n+(n===1?' change':' changes')+' unsaved' : 'No unsaved changes';
-  lbl.className = 'sp'+(n?'':' clean');
-  document.getElementById('discard').hidden = !n;
+  lbl.textContent = n===1 ? '1 change unsaved' : n+' changes unsaved';
+  lbl.className = 'sp';
+  document.getElementById('discard').hidden = false;
+  // Only on screen when there is something to save. It used to sit there
+  // permanently reading "No unsaved changes", which is a bar taking up the
+  // bottom of every page to tell you it has nothing to do.
+  document.getElementById('savebar').hidden = !n || tab==='dashboard';
 }
 function toast(m){var t=document.getElementById('toast');t.textContent=m;t.className='toast on';
   clearTimeout(window.__t); window.__t=setTimeout(function(){t.className='toast';},2200);}
@@ -284,13 +291,10 @@ function imgFor(p){ return uploads[p.slug] || p.image || '/img/favicon.png'; }
 function render(){
   var m=document.getElementById('main'), h='';
 
-  // The dashboard has nothing to save, so the savebar comes off entirely
-  // rather than sitting there reading "No unsaved changes".
-  document.getElementById('savebar').hidden = (tab==='dashboard');
-
   if(tab==='dashboard'){
     m.innerHTML=renderDash();
     wireDash();
+    refreshBar();
     return;
   }
 
