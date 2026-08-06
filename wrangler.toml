@@ -19,6 +19,25 @@ binding = "ASSETS"
 binding = "DREWRYS_KV"
 id = "7ab8ffff01814fb78607261c7111c51d"
 
+# Logs in the dashboard. This MUST live here, not just be switched on in the
+# UI: every deploy rebuilds the Worker's config from this file, so anything
+# not declared here is reset to its default on the next push. That is why it
+# kept turning itself off.
+#
+# head_sampling_rate = 1 logs every request. Drop it to 0.1 if the volume ever
+# gets noisy; at Drewrys' traffic it will not.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# Reporting: visit counts and a mirror of every paid order.
+# Create with: Workers & Pages > D1 > Create database > drewrys-analytics
+# then paste its id here.
+[[d1_databases]]
+binding = "DB"
+database_name = "drewrys-analytics"
+database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
+
 # Daily cron. Sends review requests that have come due; the queue carries its
 # own timestamps so the hour is not critical. 09:00 UTC.
 [triggers]
