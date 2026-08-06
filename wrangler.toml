@@ -36,7 +36,7 @@ head_sampling_rate = 1
 [[d1_databases]]
 binding = "DB"
 database_name = "drewrys-analytics"
-database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
+database_id = "70657923-31ea-47f1-b748-6306f8303fbc"
 
 # Daily cron. Sends review requests that have come due; the queue carries its
 # own timestamps so the hour is not critical. 09:00 UTC.
@@ -46,7 +46,7 @@ crons = ["0 9 * * *"]
 [vars]
 SHOP_NAME = "Drewrys"
 SITE_ORIGIN = "https://drewrys.store"
-TEYA_ENV = "staging"
+TEYA_ENV = "production"
 
 # Secrets — set these in the Cloudflare dashboard under the Worker's
 # Settings › Variables and Secrets (encrypted). Not here, and not via
