@@ -28,6 +28,7 @@ import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
+import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -64,6 +65,7 @@ async function renderSite(request, env) {
     methods: methods(settings),
     free_over: settings.free_over || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
+    paired_pct: pairedPct(settings),
     ingredients: await getIngredients(env),
     reviews: publishedReviews(allReviews),
     ratings: ratingSummary(allReviews),
@@ -92,7 +94,6 @@ async function renderCheckout(env) {
     methods: methods(settings),
     countries: COUNTRIES.filter((c) => c.zone),
     free_over: settings.free_over || {},
-    promos: settings.promos || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     address_lookup: !!env.ADDRESS_API_KEY,
   }));
@@ -150,6 +151,41 @@ async function sendOrderEmails(env, order) {
     subject: `New order ${order.reference} - ${gbp(order.total)}`, html: owner });
 }
 
+/* \u2500\u2500 discount codes \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+
+/** The pairs-well upsell percentage, live from settings. 0 disables the offer. */
+function pairedPct(settings) {
+  const p = normalisePromos(settings).find((x) => x.code === 'PAIRED10');
+  return p && p.active && p.type === 'percent' ? p.amount : 0;
+}
+
+/**
+ * Validate entered codes for the checkout page. The subtotal is computed
+ * server-side from the catalogue, so min-spend checks cannot be gamed, and
+ * the full code list never reaches the browser. This answer is advisory for
+ * display - priceBasket runs the same rules again at payment time and that
+ * result is the one that charges.
+ */
+async function checkPromos(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body) return json({ error: 'bad json' }, 400);
+
+  const cat = await getCatalogue(env);
+  const bySlug = Object.fromEntries(cat.products.map((p) => [p.slug, p]));
+  let subtotal = 0;
+  for (const line of Array.isArray(body.lines) ? body.lines : []) {
+    const p = bySlug[line.sku];
+    if (!p || p.active === false) continue;
+    subtotal += (p.price_pence || 0) * Math.max(1, Math.min(99, parseInt(line.qty, 10) || 0));
+  }
+
+  const settings = await getSettings(env);
+  const codes = (Array.isArray(body.codes) ? body.codes : []).slice(0, 5);
+  const result = evaluatePromos(
+    normalisePromos(settings), await getPromoUses(env), codes, subtotal);
+  return json(result);
+}
+
 async function handleWebhook(request, env, ctx) {
   const raw = await request.text();
   const sig = request.headers.get('teya-signature') || request.headers.get('x-teya-signature');
@@ -184,6 +220,7 @@ async function handleWebhook(request, env, ctx) {
     ctx.waitUntil(decrementStock(env, order));
     ctx.waitUntil(sendOrderEmails(env, order));
     ctx.waitUntil(mirrorOrder(env, order));      // reporting copy, best effort
+    ctx.waitUntil(incrementUses(env, order.promos || (order.promo ? order.promo.split(' ') : [])));
   }
   return new Response('ok', { status: 200 });
 }
@@ -593,6 +630,8 @@ async function handleAdmin(request, env, url) {
         review_google_url: String(st.review_google_url || '').slice(0, 400),
         review_facebook_url: String(st.review_facebook_url || '').slice(0, 400),
         review_auto_publish: st.review_auto_publish === true,
+        promos: (Array.isArray(st.promos) ? st.promos : normalisePromos({ promos: st.promos }))
+          .map(cleanPromo).filter(Boolean).slice(0, 100),
       };
       await env.DREWRYS_KV.put('settings', JSON.stringify(clean));
     }
@@ -601,15 +640,18 @@ async function handleAdmin(request, env, url) {
   }
 
   const cat = await getCatalogue(env);
+  const adminSettings = await getSettings(env);
+  adminSettings.promos = normalisePromos(adminSettings);
   return html(adminHtml({
     catalogue: cat,
-    settings: await getSettings(env),
+    settings: adminSettings,
     stock: await stockMap(env, cat.products),
     orders: await recentOrders(env),
     ingredients: await getIngredients(env),
     carriers: CARRIERS,
     reviews: await getReviews(env),
-    platforms: livePlatforms(await getSettings(env)),
+    platforms: livePlatforms(adminSettings),
+    promo_uses: await getPromoUses(env),
   }));
 }
 
@@ -641,6 +683,7 @@ export default {
       if (path.startsWith('/review/share/')) return handleShare(env, path.slice(14));
       if (path.startsWith('/review/')) return handleReview(request, env, path.slice(8));
       if (path === '/api/address') return lookupPostcode(request, env, url);
+      if (path === '/api/promo' && request.method === 'POST') return checkPromos(request, env);
       if (path === '/api/catalogue') {
         const cat = await getCatalogue(env);
         return json({ ...cat, stock: await stockMap(env, cat.products) });

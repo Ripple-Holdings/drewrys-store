@@ -158,7 +158,7 @@ select{cursor:pointer}
 .tot.grand span:last-child{color:var(--peanut-deep)}
 .promo{display:flex;gap:9px;margin:17px 0 18px}
 .promo input{flex:1;min-width:0;text-transform:uppercase}
-.promo button{flex:0 0 auto;padding:0 20px;border-radius:40px;background:var(--peanut);
+#promoChips:not(:empty){display:flex;flex-wrap:wrap;gap:8px;margin:-6px 0 14px}\n.pchip{display:inline-flex;align-items:center;gap:8px;background:var(--cotton-2,#ECE3D3);\n  border:1px solid var(--line,#e0d6c4);border-radius:40px;padding:6px 8px 6px 14px;\n  font-size:.84rem;font-weight:650;letter-spacing:.02em}\n.pchip small{font-weight:500;color:#6f6a62}\n.pchip button{border:0;background:none;cursor:pointer;font-size:1rem;line-height:1;\n  padding:2px 6px;color:inherit}\n.promo button{flex:0 0 auto;padding:0 20px;border-radius:40px;background:var(--peanut);
   color:var(--slate);font-weight:700;font-size:.78rem;letter-spacing:.03em;text-transform:uppercase}
 .empty{padding:70px 24px;text-align:center;color:var(--muted)}
 </style></head><body>
@@ -224,6 +224,7 @@ select{cursor:pointer}
       <input id="promoIn" placeholder="Discount code" autocomplete="off">
       <button type="button" id="promoBtn">Apply</button>
     </div>
+    <div id="promoChips"></div>
     <p class="msg" id="promoMsg" hidden></p>
     <div class="tot"><span>Subtotal</span><span id="tSub">£0.00</span></div>
     <div class="tot" id="tDiscRow" hidden><span id="tDiscLabel">Discount</span><span id="tDisc"></span></div>
@@ -242,7 +243,7 @@ const D=${JSON.stringify(state).replace(/</g, '\\u003c')};
 const money=p=>'£'+(Number(p||0)/100).toFixed(2);
 const bySlug=Object.fromEntries(D.products.map(p=>[p.slug,p]));
 const byCode=Object.fromEntries((D.countries||[]).map(c=>[c.code,c]));
-let FUL='collect', METHOD=null, PROMO=null, LINES=[];
+let FUL='collect', METHOD=null, LINES=[];\nlet CODES=[];                                  // codes the customer has entered\nlet PROMOR={applied:[],rejected:[],discount:0}; // last /api/promo answer, authoritative for display
 
 /* the bag, as left by the shop */
 try{
@@ -256,7 +257,7 @@ if(!LINES.length){
   document.getElementById('empty').hidden=false;
 } else {
   document.getElementById('grid').hidden=false;
-  if(savedPromo){ document.getElementById('promoIn').value=savedPromo; applyPromo(true); }
+  if(savedPromo){ CODES=savedPromo.split(',').map(c=>c.trim().toUpperCase()).filter(Boolean).slice(0,5);\n    if(CODES.length) validatePromos(null); }
   start();
 }
 
@@ -291,8 +292,7 @@ function shipping(){
   const m=list.find(x=>x.id===METHOD)||(list.length===1?list[0]:null);
   if(!m) return {cost:null,label:'Choose a method'};
   const thr=(D.free_over||{})[z.zone];
-  const disc=PROMO?Math.round(subtotal()*PROMO.pct/100):0;
-  if(thr && subtotal()-disc>=thr) return {cost:0,label:'Free'};
+  if(thr && subtotal()-PROMOR.discount>=thr) return {cost:0,label:'Free'};
   return {cost:m.price,label:m.name};
 }
 
@@ -336,12 +336,15 @@ function renderServices(){
 
 function refresh(){
   const sub=subtotal(), sh=shipping();
-  const disc=PROMO?Math.round(sub*PROMO.pct/100):0;
+  const disc=PROMOR.discount||0;
   document.getElementById('tSub').textContent=money(sub);
+  renderChips();
   const dr=document.getElementById('tDiscRow');
   if(disc>0){ dr.hidden=false;
+    const cs=PROMOR.applied.map(a=>a.code);
     document.getElementById('tDiscLabel').textContent=
-      PROMO.code==='PAIRED10'?'Pairs well discount':'Discount ('+PROMO.code+')';
+      cs.length===1&&cs[0]==='PAIRED10'?'Pairs well discount':
+      cs.length===1?'Discount ('+cs[0]+')':'Discounts ('+cs.join(', ')+')';
     document.getElementById('tDisc').textContent='\\u2212'+money(disc);
   } else dr.hidden=true;
   document.getElementById('tShip').textContent=
@@ -359,15 +362,58 @@ function refresh(){
   btn.hidden=!(D.address_lookup && c && (c.code==='IM'||c.code==='GB'));
 }
 
-function applyPromo(silent){
-  const code=(document.getElementById('promoIn').value||'').trim().toUpperCase();
+function renderChips(){
+  const box=document.getElementById('promoChips');
+  box.innerHTML=PROMOR.applied.map(a=>
+    '<span class="pchip">'+a.code+' <small>'+a.label+' \\u00b7 \\u2212'+money(a.discount)+
+    '</small><button type="button" data-unchip="'+a.code+'" aria-label="Remove '+a.code+
+    '">\\u00d7</button></span>').join('');
+  box.querySelectorAll('[data-unchip]').forEach(b=>b.addEventListener('click',()=>{
+    CODES=CODES.filter(c=>c!==b.dataset.unchip);
+    validatePromos(null);
+  }));
+}
+
+/* Codes are checked by the Worker, never against a list in the page - limits,
+   expiry and stacking all live server-side. newCode is the one just typed, so
+   its rejection reason is shown; anything else silently drops (a code that
+   died since it was saved). */
+async function validatePromos(newCode){
   const msg=document.getElementById('promoMsg');
-  const pct=(D.promos||{})[code];
-  if(pct){ PROMO={code,pct}; msg.hidden=false; msg.className='msg';
-    msg.textContent=pct+'% off applied.'; }
-  else { PROMO=null; if(!silent){ msg.hidden=false; msg.className='msg warn';
-    msg.textContent='That code is not recognised.'; } else msg.hidden=true; }
+  try{
+    const r=await fetch('/api/promo',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({codes:CODES,lines:LINES.map(l=>({sku:l.p.slug,qty:l.qty}))})});
+    if(!r.ok) throw new Error();
+    PROMOR=await r.json();
+    const rej=(PROMOR.rejected||[]).map(x=>x.code);
+    CODES=CODES.filter(c=>!rej.includes(c));
+    if(newCode){
+      const bad=(PROMOR.rejected||[]).find(x=>x.code===newCode);
+      const good=(PROMOR.applied||[]).find(x=>x.code===newCode);
+      msg.hidden=false;
+      if(bad){ msg.className='msg warn'; msg.textContent=bad.reason+'.'; }
+      else if(good){ msg.className='msg'; msg.textContent=good.label+' applied.'; }
+      else { msg.className='msg warn'; msg.textContent='That code could not be applied.'; }
+    } else msg.hidden=true;
+  }catch(e){
+    if(newCode){ CODES=CODES.filter(c=>c!==newCode);
+      msg.hidden=false; msg.className='msg warn';
+      msg.textContent='Could not check that code, please try again.'; }
+  }
+  try{ localStorage.setItem('drw_promo',CODES.join(',')); }catch(e){}
   refresh();
+}
+
+function applyPromo(){
+  const inp=document.getElementById('promoIn');
+  const code=(inp.value||'').trim().toUpperCase();
+  if(!code) return;
+  if(CODES.includes(code)){ inp.value=''; return; }
+  if(CODES.length>=5){ const m=document.getElementById('promoMsg');
+    m.hidden=false; m.className='msg warn'; m.textContent='Five codes is the most one order can carry.'; return; }
+  CODES.push(code); inp.value='';
+  validatePromos(code);
 }
 
 function start(){
@@ -401,7 +447,9 @@ function start(){
     document.getElementById('pc').placeholder=z&&z.placeholder?z.placeholder:'Postal code';
     renderServices(); refresh();
   });
-  document.getElementById('promoBtn').addEventListener('click',()=>applyPromo(false));
+  document.getElementById('promoBtn').addEventListener('click',()=>applyPromo());
+  document.getElementById('promoIn').addEventListener('keydown',e=>{
+    if(e.key==='Enter'){ e.preventDefault(); applyPromo(); }});
 
   document.getElementById('find').addEventListener('click',async function(){
     const pc=(document.getElementById('pc').value||'').trim();
@@ -447,7 +495,8 @@ function start(){
           fulfilment:FUL, country:document.getElementById('dest').value, method:METHOD||'',
           name:v('cName'), email:v('cEmail'), phone:v('cPhone'),
           line1:v('a1'), line2:v('a2'), city:v('aCity'), postcode:v('pc'),
-          promo:PROMO?PROMO.code:''
+          promos:PROMOR.applied.map(a=>a.code),
+          promo:PROMOR.applied.length?PROMOR.applied[0].code:''
         })});
       const d=await r.json();
       if(!r.ok||!d.url) throw new Error(d.error||'Could not start payment');

@@ -30,6 +30,7 @@ import { DEFAULT_CATALOGUE } from './catalogue-default.js';
 import { DEFAULT_INGREDIENTS } from './ingredients.js';
 import { DEFAULT_ZONES, DEFAULT_METHODS, resolveZone, resolveMethod } from './shipping.js';
 import { countryByCode } from './countries.js';
+import { normalisePromos, getPromoUses, evaluatePromos } from './promos.js';
 
 const API = {
   staging: 'https://api.teya.xyz',
@@ -193,7 +194,12 @@ export const DEFAULT_SETTINGS = {
   shipping_methods: DEFAULT_METHODS,
   free_over: {},                    // zone id -> pence, absent or 0 = no threshold
   collect_address: '',
-  promos: { DREWRYS10: 10, PAIRED10: 10 },
+  promos: [
+    { code: 'DREWRYS10', type: 'percent', amount: 10, active: true,
+      limit: 0, expires: '', stackable: false, min_spend: 0 },
+    { code: 'PAIRED10', type: 'percent', amount: 10, active: true,
+      limit: 0, expires: '', stackable: false, min_spend: 0 },
+  ],
 };
 
 /**
@@ -267,9 +273,20 @@ export async function priceBasket(env, payload) {
 
   const ful = payload.fulfilment === 'deliver' ? 'deliver' : 'collect';
 
-  const code = String(payload.promo || '').toUpperCase();
-  const pct = settings.promos[code] || 0;
-  const discount = Math.round((subtotal * pct) / 100);
+  // Codes are re-validated here with the SAME rules the checkout page used,
+  // because a limit or expiry can trip between page load and Pay. If a
+  // submitted code is no longer valid the order is refused with the reason,
+  // rather than quietly charging more than the total the customer approved.
+  const codes = Array.isArray(payload.promos) ? payload.promos
+    : payload.promo ? [payload.promo] : [];
+  const promoResult = evaluatePromos(
+    normalisePromos(settings), await getPromoUses(env), codes, subtotal);
+  if (promoResult.rejected.length) {
+    const r = promoResult.rejected[0];
+    throw new Error(`${r.reason} (${r.code}). Please remove it and try again.`);
+  }
+  const discount = promoResult.discount;
+  const appliedCodes = promoResult.applied.map((a) => a.code);
 
   let shipping = 0;
   let zone = 'collect';
@@ -296,7 +313,8 @@ export async function priceBasket(env, payload) {
 
   return {
     items, subtotal, shipping, discount,
-    promo: pct ? code : null,
+    promo: appliedCodes.length ? appliedCodes.join(' ') : null,
+    promos: appliedCodes,
     fulfilment: ful,
     zone,
     country: country ? (countryByCode[country] || {}).name || country : null,

@@ -114,6 +114,10 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .money input{padding-left:25px}
 .check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
+.prow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 16px;align-items:end}
+.prow+.prow{margin-top:4px}
+.prow label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:680px){.prow{grid-template-columns:1fr}}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
 .stars{color:var(--peanut);letter-spacing:1px}
@@ -219,6 +223,7 @@ ${DASH_CSS}
   <button data-tab="ingredients" aria-selected="false">Ingredients</button>
   <button data-tab="stock" aria-selected="false">Stock</button>
   <button data-tab="delivery" aria-selected="false">Delivery</button>
+  <button data-tab="discounts" aria-selected="false">Discounts</button>
   <button data-tab="orders" aria-selected="false">Orders</button>
   <button data-tab="reviews" aria-selected="false">Reviews</button>
 </nav>
@@ -442,6 +447,59 @@ function render(){
        'that collection is still available - better than taking an order you cannot post.</div>';
   }
 
+  if(tab==='discounts'){
+    draft.settings.promos=draft.settings.promos||[];
+    h+='<div class="note">Codes are typed at checkout. A code that is off, expired or '+
+       'past its usage limit is refused with the reason. Stackable codes can be used '+
+       'together; a non-stackable code only ever applies on its own.</div>';
+    if(!draft.settings.promos.length) h+='<div class="hint">No codes yet.</div>';
+    draft.settings.promos.forEach(function(pr,pi){
+      var used=(S.promo_uses||{})[pr.code]||0;
+      var sub=(pr.type==='fixed'?'£'+pounds(pr.amount)+' off':(pr.amount||0)+'% off')+
+        ' · used '+used+(used===1?' time':' times')+
+        (pr.limit>0?' of '+pr.limit:'')+
+        (pr.expires?' · until '+esc(pr.expires):'');
+      h+='<div class="card open"><div class="head" style="cursor:default">'+
+        '<div class="hmeta"><b>'+esc(pr.code||'NEW CODE')+'</b><span>'+sub+'</span></div>'+
+        '<label class="check" style="margin:0"><input type="checkbox" data-pr="'+pi+
+          '" data-pf="active"'+(pr.active!==false?' checked':'')+'> live</label>'+
+        '<button type="button" class="x" data-prdel="'+pi+'">&times;</button></div>'+
+        '<div class="body">'+
+        '<div class="prow">'+
+          '<div><label>Code</label>'+
+            '<input data-pr="'+pi+'" data-pf="code" value="'+esc(pr.code||'')+
+            '" placeholder="SUMMER20" style="text-transform:uppercase"></div>'+
+          '<div><label>Type</label>'+
+            '<select data-pr="'+pi+'" data-pf="type">'+
+            '<option value="percent"'+(pr.type!=='fixed'?' selected':'')+'>Percentage off</option>'+
+            '<option value="fixed"'+(pr.type==='fixed'?' selected':'')+'>Amount off</option>'+
+            '</select></div>'+
+          '<div><label>'+(pr.type==='fixed'?'Amount':'Percent')+'</label>'+
+            '<div class="money"><span>'+(pr.type==='fixed'?'£':'%')+'</span>'+
+            '<input data-pr="'+pi+'" data-pf="amount" inputmode="decimal" value="'+
+            (pr.type==='fixed'?pounds(pr.amount):(pr.amount||0))+'"></div></div>'+
+        '</div>'+
+        '<div class="prow">'+
+          '<div><label>Expires <span style="font-weight:400">(blank for never)</span></label>'+
+            '<input type="date" data-pr="'+pi+'" data-pf="expires" value="'+esc(pr.expires||'')+'"></div>'+
+          '<div><label>Usage limit <span style="font-weight:400">(blank for unlimited)</span></label>'+
+            '<input data-pr="'+pi+'" data-pf="limit" inputmode="numeric" value="'+
+            (pr.limit>0?pr.limit:'')+'" placeholder="Unlimited"></div>'+
+          '<div><label>Minimum spend <span style="font-weight:400">(0 for none)</span></label>'+
+            '<div class="money"><span>£</span>'+
+            '<input data-pr="'+pi+'" data-pf="min_spend" inputmode="decimal" value="'+
+            pounds(pr.min_spend)+'"></div></div>'+
+        '</div>'+
+        '<label class="check"><input type="checkbox" data-pr="'+pi+'" data-pf="stackable"'+
+          (pr.stackable===true?' checked':'')+'> Can be combined with other stackable codes</label>'+
+        '</div></div>';
+    });
+    h+='<button type="button" class="addstep" id="addpromo">+ Add a code</button>'+
+      '<div class="note">Uses are counted when an order is PAID, not when the code is '+
+      'typed, so an abandoned basket never burns one. PAIRED10 is the pairs-well offer '+
+      'shown after adding to bag; turn it off here and the offer stops appearing.</div>';
+  }
+
   if(tab==='orders'){
     var OPEN={paid:1,ready:1};
     var pend=S.orders.filter(function(o){return OPEN[o.status];});
@@ -617,8 +675,19 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],'+
-    '[data-act],[data-rview],[data-rev],#addnew,#addingredient');
+    '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
+
+  if(t.dataset.prdel!==undefined){
+    var prq=draft.settings.promos[+t.dataset.prdel];
+    if(prq&&prq.code&&!confirm('Delete the code '+prq.code+'?')) return;
+    draft.settings.promos.splice(+t.dataset.prdel,1); render(); refreshBar(); return; }
+
+  if(t.id==='addpromo'){
+    draft.settings.promos=draft.settings.promos||[];
+    draft.settings.promos.push({code:'',type:'percent',amount:10,active:true,
+      limit:0,expires:'',stackable:false,min_spend:0});
+    render(); refreshBar(); return; }
 
   if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; render(); return; }
 
@@ -821,6 +890,20 @@ document.addEventListener('input',function(e){
     draft.settings[t.dataset.rs] = t.type==='checkbox' ? t.checked
       : (t.type==='number'||t.dataset.rs==='review_ask_from' ? (parseInt(t.value,10)||0) : t.value);
     if(t.dataset.rs==='review_ask_from') render();
+  }
+  if(t.dataset.pr!==undefined&&t.dataset.pf){
+    var pv=draft.settings.promos[+t.dataset.pr], pf=t.dataset.pf;
+    if(pf==='active'||pf==='stackable') pv[pf]=t.checked;
+    else if(pf==='code'){ pv.code=t.value.toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30);
+      if(t.value!==pv.code) t.value=pv.code;
+      var ph=t.closest('.card').querySelector('.hmeta b'); if(ph) ph.textContent=pv.code||'NEW CODE'; }
+    else if(pf==='amount') pv.amount=pv.type==='fixed'?toPence(t.value):Math.max(0,Math.min(100,parseInt(t.value,10)||0));
+    else if(pf==='min_spend') pv.min_spend=toPence(t.value);
+    else if(pf==='limit') pv.limit=Math.max(0,parseInt(t.value,10)||0);
+    else if(pf==='type'){ var oldT=pv.type; pv.type=t.value==='fixed'?'fixed':'percent';
+      if(oldT!==pv.type) pv.amount=pv.type==='fixed'?1000:10;
+      render(); }
+    else pv[pf]=t.value;
   }
   if(t.dataset.m!==undefined&&t.dataset.mf){
     var mm=draft.settings.shipping_methods[+t.dataset.m];
