@@ -1112,7 +1112,6 @@ const noAnim=()=>reduce||typeof gsap==='undefined';
 
 let CART={};              // {index: qty}
 let PROMO=null;            // {code, pct}
-const PROMOS={ 'DREWRYS10':10 };   // placeholder code — swap for Ben's real ones
 let FUL='collect';
 
 const CART_KEY='drw_cart_v1';
@@ -1209,22 +1208,6 @@ function renderCart(){
 // drawer
 const scrim=document.getElementById('cartScrim'), panel=document.getElementById('cartPanel');
 const openCart=()=>{scrim.classList.add('open');panel.classList.add('open');renderCart();};
-(function(){
-  const btn=document.getElementById('promoBtn'), inp=document.getElementById('promoIn'), msg=document.getElementById('promoMsg');
-  if(!btn) return;
-  const apply=()=>{
-    const code=(inp.value||'').trim().toUpperCase();
-    if(!code){ PROMO=null; msg.hidden=true; renderCart(); return; }
-    if(PROMOS[code]){ PROMO={code,pct:PROMOS[code]};
-      msg.textContent=code+' applied \u2014 '+PROMOS[code]+'% off'; msg.className='promo-msg ok'; msg.hidden=false;
-    } else { PROMO=null;
-      msg.textContent="That code isn't valid"; msg.className='promo-msg'; msg.hidden=false;
-    }
-    renderCart();
-  };
-  btn.addEventListener('click',apply);
-  inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); apply(); } });
-})();
 const closeCart=()=>{scrim.classList.remove('open');panel.classList.remove('open');};
 bagBtn.addEventListener('click',openCart);
 document.getElementById('cartX').addEventListener('click',closeCart);
@@ -1303,6 +1286,7 @@ renderCart();
   }
   function pairOpen(justAdded){
     if(PAIR_DONE) return;
+    if(!__D__.paired_pct) return;   // PAIRED10 switched off in the admin
     const opts=pairOptions(justAdded);
     if(!opts.length) return;
     const list=document.getElementById('upList');
@@ -1315,7 +1299,7 @@ renderCart();
     }).join('');
     list.querySelectorAll('.up-add').forEach(b=>b.addEventListener('click',()=>{
       addToCart(+b.dataset.i);
-      if(!PROMO) PROMO={code:'PAIRED10',pct:10};
+      if(!PROMO&&__D__.paired_pct) PROMO={code:'PAIRED10',pct:__D__.paired_pct};
       PAIR_DONE=true; renderCart(); pairClose(); openCart();
     }));
     const w=document.getElementById('upWrap');
