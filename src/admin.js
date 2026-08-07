@@ -114,8 +114,10 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .money input{padding-left:25px}
 .check{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:14px}
 .check input{width:auto;min-height:0;transform:scale(1.15)}
-.prow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 16px;align-items:end}
-.prow+.prow{margin-top:4px}
+.prow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px 20px;align-items:end}
+.prow+.prow{margin-top:18px}
+.prow+.check{margin-top:20px}
+.badge.usebadge{font-size:13px;padding:5px 13px;margin-left:10px;vertical-align:2px}
 .prow label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:680px){.prow{grid-template-columns:1fr}}
 .danger{margin-top:16px;background:none;border:1px solid #e3c9c9;color:#a33;
@@ -455,12 +457,16 @@ function render(){
     if(!draft.settings.promos.length) h+='<div class="hint">No codes yet.</div>';
     draft.settings.promos.forEach(function(pr,pi){
       var used=(S.promo_uses||{})[pr.code]||0;
+      var ub='b-ok', ut='Used '+used+(used===1?' time':' times');
+      if(pr.limit>0){ ut='Used '+used+' of '+pr.limit;
+        if(used>=pr.limit) ub='b-out';
+        else if(pr.limit-used<=Math.max(3,pr.limit*0.2)) ub='b-low'; }
       var sub=(pr.type==='fixed'?'£'+pounds(pr.amount)+' off':(pr.amount||0)+'% off')+
-        ' · used '+used+(used===1?' time':' times')+
-        (pr.limit>0?' of '+pr.limit:'')+
-        (pr.expires?' · until '+esc(pr.expires):'');
+        (pr.expires?' · until '+esc(pr.expires):'')+
+        (pr.stackable?' · stackable':'');
       h+='<div class="card open"><div class="head" style="cursor:default">'+
-        '<div class="hmeta"><b>'+esc(pr.code||'NEW CODE')+'</b><span>'+sub+'</span></div>'+
+        '<div class="hmeta"><b>'+esc(pr.code||'NEW CODE')+
+        '<span class="badge usebadge '+ub+'">'+ut+'</span></b><span>'+sub+'</span></div>'+
         '<label class="check" style="margin:0"><input type="checkbox" data-pr="'+pi+
           '" data-pf="active"'+(pr.active!==false?' checked':'')+'> live</label>'+
         '<button type="button" class="x" data-prdel="'+pi+'">&times;</button></div>'+
