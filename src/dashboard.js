@@ -94,7 +94,7 @@ export const DASH_CSS = `
   cursor:default}
 .dash .bars>div:hover{background:#8a744f}
 .dash .xax{display:flex;gap:4px;margin-top:6px;font-size:10px;color:var(--faint)}
-.dash .xax>span{flex:1;text-align:center;overflow:hidden;white-space:nowrap}
+.dash .xax>span{flex:1;text-align:center;overflow:visible;white-space:nowrap;min-width:0}
 .dash .rowline{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
 @media(max-width:900px){.dash .two,.dash .bot,.dash .sub2{grid-template-columns:1fr}}
 `;

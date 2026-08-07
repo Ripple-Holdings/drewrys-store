@@ -50,6 +50,60 @@ function countable(path) {
 
 const BOT = /bot|crawl|spider|slurp|bing|yandex|baidu|duckduck|facebookexternal|headless|lighthouse|curl|wget|python-requests|monitor|uptime|pingdom|semrush|ahrefs|preview/i;
 
+/*
+ * The UA regex only catches bots that admit to being bots. Most scanners send
+ * a normal Chrome user agent, which is how a two-day-old shop showed 112
+ * "visitors" led by the US, Singapore and China. Customers do not browse from
+ * datacentres, so a hit from a hosting network is dropped regardless of what
+ * its user agent claims. request.cf carries the network's ASN and organisation
+ * name on every request, free, on all Cloudflare plans.
+ */
+const DC_ASN = new Set([
+  16509, 14618, 8987,        // Amazon / AWS
+  15169, 396982,             // Google LLC / Google Cloud (Google Fiber is AS16591, not listed)
+  8075,                      // Microsoft / Azure
+  14061,                     // DigitalOcean
+  24940,                     // Hetzner
+  16276,                     // OVH
+  45102, 37963,              // Alibaba
+  132203, 45090,             // Tencent
+  31898,                     // Oracle Cloud
+  63949,                     // Linode / Akamai
+  20473,                     // Vultr
+  51167,                     // Contabo
+  60781,                     // LeaseWeb
+  9009,                      // M247
+  212238,                    // Datacamp / CDN77
+  12876,                     // Scaleway
+  8560,                      // IONOS
+  26496,                     // GoDaddy
+  47583,                     // Hostinger
+]);
+// Deliberately NOT matched: bare "cloud" and "akamai" - iPhone users with
+// iCloud Private Relay egress through Cloudflare, Akamai and Fastly, and WARP
+// users show as Cloudflare, all real people. Linode scrapers are caught by
+// ASN 63949 instead. "colocation" not "colo", which matches Colombia.
+const DC_ORG = /amazon|google llc|google cloud|microsoft|azure|digitalocean|hetzner|ovh|alibaba|tencent|huawei cloud|oracle|linode|vultr|choopa|contabo|leaseweb|m247|datacamp|g-core|gcore|scaleway|upcloud|ionos|godaddy|hostinger|namecheap|dreamhost|colocrossing|zenlayer|aeza|stark industries|hosting|hoster|server|datacent|data cent|colocation|vps/i;
+
+/**
+ * True when the request looks like a person in a browser. Three tests, each of
+ * which real browsers pass and plain HTTP scanners fail:
+ *   1. not from a datacentre network (ASN or organisation name)
+ *   2. carries Accept-Language - every real browser sends it, headless
+ *      clients routinely do not
+ *   3. if Sec-Fetch-Mode is present it must be "navigate", which is what a
+ *      page load is; anything else is a script fetching, not a person
+ */
+function humanRequest(request) {
+  const cf = request.cf || {};
+  if (cf.asn && DC_ASN.has(Number(cf.asn))) return false;
+  if (cf.asOrganization && DC_ORG.test(String(cf.asOrganization))) return false;
+  if (!request.headers.get('accept-language')) return false;
+  const sfm = request.headers.get('sec-fetch-mode');
+  if (sfm && sfm !== 'navigate') return false;
+  return true;
+}
+
 /**
  * A visitor is a hash of IP + user agent + a salt that rotates daily, cut to
  * 8 bytes. The same person all day is one visitor; the same person tomorrow is
@@ -113,8 +167,31 @@ export async function ensureSchema(env) {
   if (!env.DB) return false;
   if (built.has(env.DB)) return true;
   for (const sql of SCHEMA) await env.DB.prepare(sql).run();
+  await migrateFilterV2(env);
   built.add(env.DB);
   return true;
+}
+
+/*
+ * One-time reset, versioned in meta so it runs exactly once ever. Everything
+ * counted before the datacentre filter existed is unsalvageable - the raw hit
+ * rows carry no network information, so bot rows cannot be told apart from
+ * real ones after the fact. Two days of scanner noise is deleted and counting
+ * restarts clean, including first_day so the dashboard's "tracking started"
+ * date is honest. Orders are untouched: ord and ord_item are mirrored from KV
+ * and were never polluted.
+ */
+async function migrateFilterV2(env) {
+  const row = await env.DB.prepare(
+    `SELECT v FROM meta WHERE k = 'filter_v'`).first();
+  if (row && row.v === '2') return;
+  for (const t of ['hit', 'day_total', 'hour_total', 'path_total', 'country_total']) {
+    await env.DB.prepare(`DELETE FROM ${t}`).run();
+  }
+  await env.DB.prepare(`DELETE FROM meta WHERE k = 'first_day'`).run();
+  await env.DB.prepare(
+    `INSERT INTO meta (k, v) VALUES ('filter_v', '2')
+     ON CONFLICT(k) DO UPDATE SET v = '2'`).run();
 }
 
 /** First day anything was recorded. Drives the "tracking started" copy. */
@@ -140,6 +217,7 @@ export async function recordHit(request, env, path) {
   if (!countable(path)) return;
   const ua = request.headers.get('user-agent') || '';
   if (!ua || BOT.test(ua)) return;
+  if (!humanRequest(request)) return;
 
   try {
     await ensureSchema(env);
