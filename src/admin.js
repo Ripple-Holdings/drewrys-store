@@ -18,18 +18,19 @@ import { DASH_CSS, DASH_JS } from './dashboard.js';
 export const GATE = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drewrys · Admin</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
+<link rel="stylesheet" href="/fonts.css">
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-  background:#191C21;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  background:#191C21;font-family:'Geist',system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .gate{width:320px;max-width:88vw;text-align:center;color:#F3EDE1}
 .mark{width:76px;margin:0 auto 20px;display:block}
-h1{font-size:19px;margin:0 0 6px;font-weight:600;letter-spacing:-.01em}
+h1{font-family:'NeueMontreal','Geist',system-ui,sans-serif;font-size:19px;margin:0 0 6px;font-weight:500;letter-spacing:-.01em}
 p{color:#9a948a;font-size:13px;margin:0 0 22px}
 input{width:100%;padding:14px 16px;font-size:20px;letter-spacing:.3em;text-align:center;
   border:1px solid #3a3630;background:#111417;color:#F3EDE1;border-radius:11px;outline:none}
 input:focus{border-color:#C79A6B}
-button{width:100%;margin-top:12px;padding:13px;font-size:15px;font-weight:600;
+button{width:100%;margin-top:12px;padding:13px;font-family:'NeueMontreal','Geist',system-ui,sans-serif;font-size:15px;font-weight:500;
   color:#191C21;background:#C79A6B;border:0;border-radius:11px;cursor:pointer}
 button:disabled{opacity:.5}
 .err{color:#e08b8b;font-size:13px;min-height:18px;margin-top:12px}
@@ -66,12 +67,14 @@ export function adminHtml(state) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Drewrys · Admin</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
+<link rel="stylesheet" href="/fonts.css">
 <style>
 :root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--ink:#191C21;--peanut:#C79A6B;
   --olive:#94876d;--line:#e0d6c4;--muted:#6f6a62}
 *{box-sizing:border-box}
+button{font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 body{margin:0;background:var(--cotton);color:var(--ink);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:104px}
+  font-family:'Geist',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:104px}
 header{position:sticky;top:0;z-index:20;background:var(--ink);color:var(--cotton);
   padding:11px 18px;display:flex;align-items:center;gap:11px}
 header img{height:26px;width:auto;display:block;filter:invert(1) brightness(1.6)}
@@ -93,7 +96,7 @@ main{padding:16px 18px;max-width:940px;margin:0 auto}
   position:relative;overflow:hidden}
 .thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:5px}
 .hmeta{flex:1;min-width:0}
-.hmeta b{display:block;font-size:15px;font-weight:600}
+.hmeta b{display:block;font-family:'NeueMontreal','Geist',system-ui,sans-serif;font-size:15px;font-weight:500;letter-spacing:-.01em}
 .hmeta span{font-size:12.5px;color:var(--muted)}
 .chev{flex:0 0 auto;color:var(--muted);transition:transform .18s;font-size:13px}
 .card.open .chev{transform:rotate(90deg)}
@@ -141,10 +144,10 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
   font-size:13.5px;color:#2c5c2c}
 .ghost{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);
   background:#fff;color:var(--ink);padding:0 18px;border-radius:10px;font-size:14px;
-  cursor:pointer;height:44px;font-family:inherit}
+  cursor:pointer;height:44px;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .ghost:hover{background:var(--cotton)}
-.ghost.del{color:#a33;border-color:#e0c3c3}
-.ghost.del:hover{background:#fdf2f2;border-color:#d3a9a9}
+.ghost.del{background:#a33b30;border-color:#a33b30;color:#fff}
+.ghost.del:hover{background:#8f3128;border-color:#8f3128}
 .svcrow{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
 .svcmain{flex:1;min-width:0;display:grid;gap:6px}
 .svcp{flex:0 0 118px}
@@ -163,7 +166,7 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
   border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .icon-slot img{width:30px;height:30px;object-fit:contain}
 .icon-slot.empty{border-style:dashed;color:var(--muted);font-size:11px;text-align:center;line-height:1.2}
-.hint{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
+.hint{font-size:12px;color:var(--muted);margin:7px 0;line-height:1.5}
 .steps{counter-reset:s}
 .steprow{display:flex;gap:9px;align-items:flex-start;margin-top:8px}
 .steprow .num{flex:0 0 auto;width:28px;height:44px;display:flex;align-items:center;
@@ -171,7 +174,7 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
 .steprow textarea{min-height:44px}
 .steprow .x{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);background:#fff;
   border-radius:9px;cursor:pointer;color:var(--muted);font-size:17px}
-.addstep{margin-top:9px;background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
+.addstep{margin:12px 0 16px;background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
   padding:10px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
 .upload{display:flex;align-items:center;gap:11px;margin-top:6px}
 .upload button{background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
@@ -469,7 +472,7 @@ function render(){
         '<span class="badge usebadge '+ub+'">'+ut+'</span></b><span>'+sub+'</span></div>'+
         '<label class="check" style="margin:0"><input type="checkbox" data-pr="'+pi+
           '" data-pf="active"'+(pr.active!==false?' checked':'')+'> live</label>'+
-        '<button type="button" class="x" data-prdel="'+pi+'">&times;</button></div>'+
+        '<button type="button" class="ghost del" data-prdel="'+pi+'">Delete</button></div>'+
         '<div class="body">'+
         '<div class="prow">'+
           '<div><label>Code</label>'+

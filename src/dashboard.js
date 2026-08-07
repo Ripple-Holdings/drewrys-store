@@ -21,9 +21,10 @@
  */
 
 export const DASH_CSS = `
+.dash button{font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .dash{--cream:#f2ede3;--card:#fff;--ink:#1c1a16;--muted:#8a8377;--faint:#a39c8e;
   --sec:#6d675b;--acc:#6f8a5f;--accd:#8a744f;--line:#e4ddcf;--grid:#eee8db;
-  font-family:system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-family:'Geist',system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
   color:var(--ink);display:flex;flex-direction:column;gap:24px}
 .dash .card{background:var(--card);border-radius:12px;padding:22px 24px;
   box-shadow:0 1px 3px rgba(60,50,30,0.07)}
@@ -34,18 +35,18 @@ export const DASH_CSS = `
 .dash .seg{display:flex;gap:6px;background:#fff;border:1px solid var(--line);
   border-radius:24px;padding:4px}
 .dash .seg button{border:0;background:none;color:var(--sec);font-size:13px;
-  padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit}
+  padding:7px 14px;border-radius:20px;cursor:pointer;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .dash .seg button[aria-selected=true]{background:var(--accd);color:#fff;font-weight:600}
 .dash .pillseg{display:flex;gap:4px;background:var(--cream);border-radius:20px;padding:3px}
 .dash .pillseg button{border:0;background:none;color:var(--sec);font-size:12px;
-  padding:5px 12px;border-radius:16px;cursor:pointer;font-family:inherit}
+  padding:5px 12px;border-radius:16px;cursor:pointer;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .dash .pillseg button[aria-selected=true]{background:#fff;color:var(--ink);font-weight:600}
 .dash .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
 .dash .kpi{background:var(--card);border-radius:12px;padding:18px 20px;
   box-shadow:0 1px 3px rgba(60,50,30,0.07)}
 .dash .kpi .lab{font-size:12px;text-transform:uppercase;color:var(--muted);
   letter-spacing:.04em}
-.dash .kpi .val{font-size:26px;font-weight:650;margin:6px 0 8px;letter-spacing:-.01em}
+.dash .kpi .val{font-family:'NeueMontreal','Geist',system-ui,sans-serif;font-size:26px;font-weight:500;margin:6px 0 8px;letter-spacing:-.01em}
 .dash .chg{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--faint);
   min-height:20px}
 .dash .badge{font-size:11px;font-weight:650;border-radius:10px;padding:2px 8px}
@@ -55,7 +56,7 @@ export const DASH_CSS = `
 .dash .grn{background:#e6efe2;color:#4a7a3d}
 .dash .red{background:#f6e3dd;color:#a04a33}
 .dash .pur{background:#e9e5f0;color:#5c5480}
-.dash .ch{font-size:16px;font-weight:600;margin:0}
+.dash .ch{font-family:'NeueMontreal','Geist',system-ui,sans-serif;font-size:16px;font-weight:500;letter-spacing:-.01em;margin:0}
 .dash .cs{font-size:12px;color:var(--muted);margin:3px 0 0}
 .dash .two{display:grid;grid-template-columns:3fr 2fr;gap:20px}
 .dash .col{display:flex;flex-direction:column;gap:20px}
