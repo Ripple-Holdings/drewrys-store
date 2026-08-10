@@ -245,7 +245,7 @@ var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
-var tab='dashboard', openCard=null, orderView='todo', revView='pending';
+var tab='dashboard', openCard=null, orderView='todo', revView='pending', DIAG=null;
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -513,6 +513,51 @@ function render(){
     var OPEN={paid:1,ready:1};
     var pend=S.orders.filter(function(o){return OPEN[o.status];});
     var done=S.orders.filter(function(o){return !OPEN[o.status];});
+    if(orderView==='pay'){
+      h+='<div class="ofilter">'+
+        '<button type="button" data-oview="todo">To fulfil</button>'+
+        '<button type="button" data-oview="done">Done</button>'+
+        '<button type="button" data-oview="pay" class="on">Payments</button></div>';
+      if(!DIAG){
+        h+='<div class="note">Loading...</div>';
+        fetch('/admin/diag',{headers:{'x-admin-key':KEY}})
+          .then(function(r){return r.json();})
+          .then(function(d){ DIAG=d; render(); })
+          .catch(function(){ DIAG={error:'could not load'}; render(); });
+      } else if(DIAG.error){
+        h+='<div class="note">'+esc(DIAG.error)+'</div>';
+      } else {
+        h+='<div class="note">'+esc(DIAG.hint||'')+'</div>';
+        h+='<div class="panel"><h3>Settings the Worker can see</h3><div class="bars">'+
+          Object.keys(DIAG.configured).map(function(k){
+            var v=DIAG.configured[k];
+            return '<div class="bar"><span class="bl">'+esc(k)+'</span><span class="bt"></span>'+
+              '<span class="bv" style="color:'+(v==='set'?'inherit':'#a33')+'">'+v+'</span></div>';
+          }).join('')+'</div></div>';
+
+        h+='<div class="panel"><h3>Orders in the store, including unpaid</h3>';
+        if(!DIAG.orders.length){ h+='<div class="note">None at all.</div>'; }
+        else {
+          h+='<div class="bars">'+DIAG.orders.map(function(o){
+            return '<div class="bar"><span class="bl">'+esc(o.reference)+'</span>'+
+              '<span class="bt" style="background:none">'+esc(o.status)+
+                (o.session_id?'':' <em>no session id</em>')+'</span>'+
+              '<span class="bv">'+(o.status==='pending'
+                ? '<button type="button" class="ghost inline" data-recon="'+esc(o.reference)+'">Check payment</button>'
+                : money(o.total))+'</span></div>';
+          }).join('')+'</div>';
+        }
+        h+='</div>';
+
+        h+='<div class="panel"><h3>Webhook hits</h3>';
+        h+= DIAG.webhook_hits.length
+          ? '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">'+
+              esc(JSON.stringify(DIAG.webhook_hits,null,1))+'</pre>'
+          : '<div class="note">Nothing has ever hit a webhook path on this Worker.</div>';
+        h+='</div>';
+      }
+    }
+
     var list=(orderView==='done')?done:pend;
 
     h+='<div class="ofilter">'+
@@ -526,7 +571,8 @@ function render(){
          'payment, and a copy goes to your email.</div>';
     } else if(!list.length){
       h+='<div class="note">'+(orderView==='done'
-        ?'Nothing completed yet.':'Nothing waiting.')+'</div>';
+        ?'Nothing completed yet.':'Nothing waiting.')+      '<button type="button" data-oview="pay"'+(orderView==='pay'?' class="on"':'')+'>Payments</button>'+
+'</div>';
     }
 
     list.forEach(function(o){
@@ -683,7 +729,7 @@ function render(){
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
-    '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],'+
+    '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
 
@@ -698,7 +744,21 @@ document.addEventListener('click',function(e){
       limit:0,expires:'',stackable:false,min_spend:0});
     render(); refreshBar(); return; }
 
-  if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; render(); return; }
+  if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; if(t.dataset.oview==='pay') DIAG=null; render(); return; }
+
+  if(t.dataset.recon!==undefined){
+    t.textContent='Checking...';
+    fetch('/admin/reconcile?ref='+encodeURIComponent(t.dataset.recon),
+          {headers:{'x-admin-key':KEY}})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        toast(d.error ? d.error
+              : ('Teya says '+(d.teya_status||'?')+(d.paid?' - marked paid, emails sent':' - not paid')));
+        DIAG=null; render();
+      })
+      .catch(function(){ toast('Could not reach Teya'); });
+    return;
+  }
 
   if(t.dataset.rview!==undefined){ revView=t.dataset.rview; render(); return; }
 

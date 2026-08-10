@@ -284,6 +284,69 @@ async function logHook(env, entry) {
   } catch (e) { console.error('logHook failed', String(e && e.message || e)); }
 }
 
+/**
+ * One place that answers "what is actually going on with payments".
+ *
+ * Lists every parked order INCLUDING pending ones. The admin's Orders tab is
+ * built from orders:recent, which is only written when an order is PAID, so a
+ * checkout that never completed was invisible and its reference unobtainable.
+ * That is why there was no DRW- number to reconcile with.
+ */
+async function handleDiag(request, env, url) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+
+  const orders = [];
+  try {
+    let cursor;
+    do {
+      const page = await env.DREWRYS_KV.list({ prefix: 'order:', cursor, limit: 200 });
+      for (const k of page.keys) {
+        const raw = await env.DREWRYS_KV.get(k.name);
+        if (!raw) continue;
+        let o = {}; try { o = JSON.parse(raw); } catch { continue; }
+        orders.push({
+          reference: o.reference, status: o.status, created: o.created,
+          settled: o.settled || null, total: o.total,
+          email: (o.customer && o.customer.email) || '',
+          session_id: o.session_id || null,
+        });
+      }
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  } catch (e) {
+    return json({ error: 'could not list orders: ' + String(e && e.message || e) }, 500);
+  }
+  orders.sort((a, b) => String(b.created || '').localeCompare(String(a.created || '')));
+
+  const hookRaw = await env.DREWRYS_KV.get('webhook:log');
+
+  // Presence only. Never echo a secret's value.
+  const cfg = {};
+  for (const k of ['ADMIN_KEY','TEYA_CLIENT_ID','TEYA_CLIENT_SECRET','TEYA_API_KEY',
+                   'TEYA_STORE_ID','TEYA_WEBHOOK_SECRET','SENDGRID_API_KEY',
+                   'SHOP_FROM_EMAIL','SHOP_ORDER_EMAIL','SITE_ORIGIN','TEYA_ENV']) {
+    cfg[k] = env[k] ? 'set' : 'MISSING';
+  }
+
+  return json({
+    configured: cfg,
+    counts: {
+      total: orders.length,
+      pending: orders.filter((o) => o.status === 'pending').length,
+      paid: orders.filter((o) => o.status === 'paid').length,
+      failed: orders.filter((o) => o.status === 'failed').length,
+    },
+    orders: orders.slice(0, 40),
+    webhook_hits: hookRaw ? JSON.parse(hookRaw) : [],
+    hint: orders.length === 0
+      ? 'No orders parked at all. /create-session is failing before it parks anything, so the checkout never reached Teya.'
+      : (orders.some((o) => o.status === 'pending')
+          ? 'Pending orders exist, so checkout works and the payment result never came back. Reconcile one with /admin/reconcile?ref=<reference>&key=<ADMIN_KEY>'
+          : 'No pending orders.'),
+  });
+}
+
 async function handleWebhookLog(request, env, url) {
   const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
@@ -825,6 +888,7 @@ export default {
       if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {
         return handleWebhook(request, env, ctx);
       }
+      if (path === '/admin/diag') return handleDiag(request, env, url);
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);
       if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
       if (path === '/terms') return html(TERMS);
