@@ -48,14 +48,22 @@ SHOP_NAME = "Drewrys"
 SITE_ORIGIN = "https://drewrys.store"
 TEYA_ENV = "production"
 
+# Email addresses. These are NOT secrets, so they belong here rather than in
+# the dashboard. Until they were set, sendEmail fell back to a hardcoded
+# orders@drewrys.store for the From, and the owner notification was dropped
+# entirely because sendEmail returns early when `to` is empty.
+SHOP_FROM_EMAIL = "noreply@drewrys.store"
+SHOP_ORDER_EMAIL = "hello@drewrys.store"
+SHOP_CONTACT_EMAIL = "hello@drewrys.store"
+
 # Secrets — set these in the Cloudflare dashboard under the Worker's
 # Settings › Variables and Secrets (encrypted). Not here, and not via
 # wrangler, which isn't available on a Chromebook.
 #
-#   ADMIN_KEY             1875
+#   ADMIN_KEY             PIN for /admin
 #   TEYA_API_KEY          from Ben's Teya Business Portal
 #   TEYA_STORE_ID         GB1953MQ (the Drewrys store profile)
 #   TEYA_WEBHOOK_SECRET   captured when the webhook is created
 #   SENDGRID_API_KEY      order emails
-#   SHOP_ORDER_EMAIL      "noreply@drewrys.store"
-#   SHOP_FROM_EMAIL       "hello@drewrys.store"
+#   (SHOP_ORDER_EMAIL, SHOP_FROM_EMAIL and SHOP_CONTACT_EMAIL are NOT secrets
+#    and are set in [vars] above.)
