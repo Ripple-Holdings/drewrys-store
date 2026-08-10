@@ -14,8 +14,7 @@
 
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
-  getIngredients, DEFAULT_SETTINGS,
-  refundPayment,
+  getIngredients, getSessionStatus, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
@@ -29,7 +28,6 @@ import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
-import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail } from './refunds.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
 
@@ -188,39 +186,45 @@ async function checkPromos(request, env) {
   return json(result);
 }
 
-async function handleWebhook(request, env, ctx) {
-  const raw = await request.text();
-  const sig = request.headers.get('teya-signature') || request.headers.get('x-teya-signature');
-  if (!(await verifySignature(raw, sig, env.TEYA_WEBHOOK_SECRET))) {
-    return new Response('bad signature', { status: 401 });
+/**
+ * Pull our order reference out of whatever shape Teya sends.
+ *
+ * Teya has no documented reference field, so createSession sends our reference
+ * only on the return URLs and the Idempotency-Key, and maps session id to
+ * reference in KV. The webhook therefore usually arrives carrying a SESSION ID
+ * and nothing else, which is why matching on `event.reference` alone silently
+ * did nothing: no reference meant an early 200 and no email, no order, no log.
+ */
+async function resolveReference(env, event) {
+  const d = event.data || {};
+  const direct = event.reference || d.reference ||
+                 event.merchant_reference || d.merchant_reference ||
+                 (event.metadata && event.metadata.reference) ||
+                 (d.metadata && d.metadata.reference) || '';
+  if (direct) return { reference: direct, via: 'reference field' };
+
+  const sessionId = event.session_id || d.session_id ||
+                    event.checkout_session_id || d.checkout_session_id ||
+                    event.id || d.id || '';
+  if (sessionId) {
+    const mapped = await env.DREWRYS_KV.get(`session:${sessionId}`);
+    if (mapped) return { reference: mapped, via: `session:${sessionId}` };
+    return { reference: '', via: `session ${sessionId} not in KV` };
   }
+  return { reference: '', via: 'no reference and no session id' };
+}
 
-  let event = {};
-  try { event = JSON.parse(raw); } catch { return new Response('bad json', { status: 400 }); }
-
-  const reference = event.reference || event.data?.reference || '';
-  const status = String(event.status || event.data?.status || event.type || '').toLowerCase();
-  const paid = /succeed|success|paid|complete|captur/.test(status);
-  if (!reference) return new Response('ok', { status: 200 });
-
+/** Mark an order paid or failed, and fire everything that follows. Used by
+ *  both the webhook and the manual reconcile so the two cannot drift. */
+async function settleOrder(env, ctx, reference, paid, txn) {
   const stored = await env.DREWRYS_KV.get(`order:${reference}`);
-  if (!stored) { console.warn('webhook for unknown order', reference); return new Response('ok', { status: 200 }); }
-
+  if (!stored) return { ok: false, reason: 'order not found' };
   const order = JSON.parse(stored);
-  if (order.status === 'paid') return new Response('ok', { status: 200 }); // idempotent
+  if (order.status === 'paid') return { ok: true, reason: 'already paid' };
 
   order.status = paid ? 'paid' : 'failed';
   order.settled = new Date().toISOString();
-  // Without this no refund can ever be issued for the order: /v3/refunds is
-  // keyed on the ORIGINAL payment's transaction id and Teya does not accept a
-  // session id or our own reference in its place.
-  const txn = event.transaction_id || event.data?.transaction_id ||
-              event.payment?.transaction_id || event.data?.payment?.transaction_id || '';
   if (txn) order.transaction_id = txn;
-  else if (paid) console.warn('paid webhook carried no transaction id', reference);
-  // A pending checkout expires in 90 days; a PAID one is an accounting record
-  // and has to outlive that. Six years plus the current year, per the privacy
-  // policy and IoM record-keeping requirements.
   await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify(order),
     paid ? { expirationTtl: 60 * 60 * 24 * 365 * 7 } : undefined);
 
@@ -228,9 +232,82 @@ async function handleWebhook(request, env, ctx) {
     await pushRecent(env, reference);
     ctx.waitUntil(decrementStock(env, order));
     ctx.waitUntil(sendOrderEmails(env, order));
-    ctx.waitUntil(mirrorOrder(env, order));      // reporting copy, best effort
+    ctx.waitUntil(mirrorOrder(env, order));
     ctx.waitUntil(incrementUses(env, order.promos || (order.promo ? order.promo.split(' ') : [])));
   }
+  return { ok: true, status: order.status };
+}
+
+/**
+ * Ask Teya directly what happened to an order, and settle it from the answer.
+ * Recovers anything whose webhook never arrived, and doubles as a way to test
+ * the whole email and admin path without depending on the webhook at all.
+ *   GET /admin/reconcile?ref=DRW-XXXX&key=<ADMIN_KEY>
+ */
+async function handleReconcile(request, env, url, ctx) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+
+  const ref = (url.searchParams.get('ref') || '').trim();
+  if (!ref) return json({ error: 'pass ?ref=DRW-XXXX' }, 400);
+
+  const stored = await env.DREWRYS_KV.get(`order:${ref}`);
+  if (!stored) return json({ error: 'no such order', reference: ref }, 404);
+  const order = JSON.parse(stored);
+
+  if (!order.session_id) {
+    return json({ reference: ref, status: order.status,
+                  error: 'order has no session_id, so Teya cannot be asked' }, 409);
+  }
+
+  const res = await getSessionStatus(env, order.session_id);
+  if (!res) return json({ reference: ref, error: 'could not reach Teya' }, 502);
+
+  const out = await settleOrder(env, ctx, ref, res.paid, res.transaction_id);
+  return json({ reference: ref, session_id: order.session_id,
+                teya_status: res.status, transaction_id: res.transaction_id,
+                paid: res.paid, result: out });
+}
+
+async function handleWebhook(request, env, ctx) {
+  const raw = await request.text();
+  const sig = request.headers.get('teya-signature') || request.headers.get('x-teya-signature');
+  if (!(await verifySignature(raw, sig, env.TEYA_WEBHOOK_SECRET))) {
+    console.error('webhook REJECTED: signature check failed. header present:', Boolean(sig));
+    return new Response('bad signature', { status: 401 });
+  }
+
+  let event = {};
+  try { event = JSON.parse(raw); } catch { return new Response('bad json', { status: 400 }); }
+
+  // Always log the shape. Every webhook problem so far has been a field-name
+  // guess, and without this the tail shows nothing at all.
+  console.log('webhook in:', JSON.stringify({
+    topKeys: Object.keys(event),
+    dataKeys: Object.keys(event.data || {}),
+    type: event.type || event.event || '',
+    status: event.status || (event.data && event.data.status) || '',
+    payment_status: event.payment_status || (event.data && event.data.payment_status) || '',
+  }));
+
+  const { reference, via } = await resolveReference(env, event);
+  if (!reference) {
+    console.error('webhook UNMATCHED:', via, '- raw:', raw.slice(0, 600));
+    return new Response('ok', { status: 200 });
+  }
+  console.log('webhook matched order', reference, 'via', via);
+
+  const d = event.data || {};
+  const status = String(event.payment_status || d.payment_status ||
+                        event.status || d.status || event.type || '').toUpperCase();
+  const txn = event.transaction_id || d.transaction_id || d.transactionId ||
+              (d.payment && (d.payment.transaction_id || d.payment.id)) || '';
+  const looksGood = /SUCCE|PAID|COMPLET|CAPTUR/.test(status);
+  if (looksGood && !txn) {
+    console.warn('webhook says success but carries no transaction id, not marking paid:', reference);
+  }
+  const out = await settleOrder(env, ctx, reference, looksGood && Boolean(txn), txn);
+  if (!out.ok) console.warn('webhook for unknown order', reference);
   return new Response('ok', { status: 200 });
 }
 
@@ -495,126 +572,6 @@ async function fulfilOrder(env, body) {
   return json({ ok: true, order, emailed: false });
 }
 
-/* ── refunds ─────────────────────────────────────────────────────────────── */
-
-/**
- * Refund an order in full and put it right on our side.
- *
- * Full only, by decision: Teya supports partial refunds but the shop does not
- * offer them, so the amount is always the order total and never comes from the
- * browser. That also means a refunded order can never be refunded again, which
- * is enforced here as well as by the deterministic idempotency key in teya.js.
- *
- * Order of operations matters. The money moves FIRST; stock, email and status
- * only follow a confirmed success. A pending refund changes nothing except a
- * marker, because telling Ben stock is back when the refund may still fail
- * would put the shop out of step with reality.
- */
-async function refundOrder(env, body) {
-  const ref = String(body.reference || '').slice(0, 40);
-  if (!ref) return json({ error: 'no reference' }, 400);
-
-  const raw = await env.DREWRYS_KV.get(`order:${ref}`);
-  if (!raw) return json({ error: 'order not found' }, 404);
-  const order = JSON.parse(raw);
-
-  if (order.refund && order.refund.state === 'refunded') {
-    return json({ error: 'this order has already been refunded' }, 409);
-  }
-  if (order.refund && order.refund.state === 'pending') {
-    return json({ error: 'a refund for this order is already in progress' }, 409);
-  }
-  if (!['paid', 'ready', 'collected', 'dispatched'].includes(order.status)) {
-    return json({ error: 'only a paid order can be refunded' }, 400);
-  }
-  if (!order.transaction_id) {
-    return json({ error: 'no payment transaction is recorded against this order, ' +
-                         'so it has to be refunded in the Teya portal' }, 409);
-  }
-
-  const reason = String(body.reason || '').slice(0, 40);
-  if (!RETURN_REASONS.some((r) => r.id === reason)) {
-    return json({ error: 'choose a reason for the return' }, 400);
-  }
-  const restock = body.restock === true;
-  const noRestockReason = String(body.no_restock_reason || '').slice(0, 40);
-  if (!restock && !NO_RESTOCK_REASONS.some((r) => r.id === noRestockReason)) {
-    return json({ error: 'say why the stock cannot be sold again' }, 400);
-  }
-  const note = String(body.note || '').trim().slice(0, 400);
-
-  const result = await refundPayment(env, {
-    transaction_id: order.transaction_id,
-    amount: order.total,                 // full only, and ours not the browser's
-    reference: ref,
-  });
-
-  order.refund = {
-    state: result.state,                 // refunded | pending | failed | error
-    amount: order.total,
-    reason,
-    reason_label: reasonLabel(RETURN_REASONS, reason),
-    restock,
-    no_restock_reason: restock ? '' : noRestockReason,
-    no_restock_label: restock ? '' : reasonLabel(NO_RESTOCK_REASONS, noRestockReason),
-    note,
-    refund_id: result.refund_id || '',
-    requested: new Date().toISOString(),
-    ...(result.state === 'refunded' ? { completed: new Date().toISOString() } : {}),
-    ...(result.error ? { error: result.error } : {}),
-    ...(result.reason ? { decline_reason: result.reason } : {}),
-  };
-
-  // A failed attempt is still recorded, so Ben can see it was tried and why it
-  // did not go through rather than clicking into silence.
-  if (result.state === 'refunded') order.status = 'refunded';
-
-  await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
-    { expirationTtl: 60 * 60 * 24 * 365 * 7 });
-
-  if (result.state !== 'refunded') {
-    return json({
-      ok: result.state === 'pending',
-      state: result.state,
-      order,
-      error: result.error || (result.state === 'pending'
-        ? 'Teya has accepted the refund but not confirmed it yet. It will show as '
-          + 'pending until confirmed.'
-        : 'the refund did not go through'),
-    }, result.state === 'pending' ? 200 : 502);
-  }
-
-  if (restock) await restoreStock(env, order);
-
-  let emailed = false;
-  if (order.customer?.email) {
-    emailed = await sendEmail(env, {
-      to: order.customer.email,
-      subject: `Your Drewrys order ${ref} has been refunded`,
-      html: refundEmail(order, {
-        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
-        shopName: env.SHOP_NAME || 'Drewrys',
-      }),
-    });
-    if (emailed) {
-      order.refund.emailed = new Date().toISOString();
-      await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
-        { expirationTtl: 60 * 60 * 24 * 365 * 7 });
-    }
-  }
-
-  return json({ ok: true, state: 'refunded', order, emailed });
-}
-
-/** The mirror of decrementStock. Unlimited lines are left alone, as there. */
-async function restoreStock(env, order) {
-  for (const item of order.items || []) {
-    const cur = await getStock(env, item.sku);
-    if (cur === null) continue;
-    await env.DREWRYS_KV.put(`stock:${item.sku}`, String(cur + (item.quantity || 0)));
-  }
-}
-
 /** Uploaded product photos are stored in KV and served from /media/<slug>. */
 async function saveImage(env, slug, dataUrl) {
   const m = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
@@ -667,7 +624,6 @@ async function handleAdmin(request, env, url) {
     // order actions are immediate, not part of the save-draft flow
     if (body.order) return fulfilOrder(env, body.order);
     if (body.review) return moderateReview(env, body.review);
-    if (body.refund) return refundOrder(env, body.refund);
 
     // Photos first, so the catalogue can be written with their final URLs.
     const savedImages = {};
@@ -782,8 +738,6 @@ async function handleAdmin(request, env, url) {
     reviews: await getReviews(env),
     platforms: livePlatforms(adminSettings),
     promo_uses: await getPromoUses(env),
-    return_reasons: RETURN_REASONS,
-    no_restock_reasons: NO_RESTOCK_REASONS,
   }));
 }
 
@@ -822,6 +776,7 @@ export default {
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
       if (path === '/webhook' && request.method === 'POST') return handleWebhook(request, env, ctx);
+      if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);
       if (path === '/privacy') return html(PRIVACY);
