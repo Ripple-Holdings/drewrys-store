@@ -39,11 +39,8 @@ const API = {
 
 // Cached per isolate. Workers reuse an isolate across requests, so this saves a
 // token round trip on most calls without ever persisting a credential.
-// Keyed by environment AND SCOPE. Teya grants scopes at token-mint time, so a
-// checkout token cannot be reused for a refund - a warm isolate handing the
-// wrong one over gets a 403 "token has no scopes defined".
-const _tokens = {};         // key -> { value, expires }
-const _tokenInFlight = {};  // key -> promise, single-flight guard
+let _token = null;          // { value, expires }
+let _tokenInFlight = null;  // single-flight guard
 
 /**
  * Candidate token endpoints, tried in order until one answers with a token.
@@ -76,10 +73,6 @@ function tokenCandidates(env) {
 // inside a warm isolate.
 const _tokenUrlFound = {};
 
-// The scope a plain API call needs. Refunds ask for their own; see SCOPE_REFUND.
-export const SCOPE_CHECKOUT = 'checkout/sessions/create';
-export const SCOPE_REFUND = 'refunds/create';
-
 function envKey(env) {
   return env.TEYA_ENV === 'production' ? 'production' : 'staging';
 }
@@ -95,17 +88,14 @@ function tokenUrl(env) {
  * can be revoked before its stated TTL by a key rotation or clock skew, and the
  * expiry alone will not tell you.
  */
-async function getAccessToken(env, force = false, scope = null) {
-  const want = scope || env.TEYA_SCOPE || SCOPE_CHECKOUT;
-  const key = `${envKey(env)}|${want}`;
+async function getAccessToken(env, force = false) {
   const now = Date.now();
-  const held = _tokens[key];
-  if (!force && held && held.expires > now + 30000) return held.value;
+  if (!force && _token && _token.expires > now + 30000) return _token.value;
 
-  // Collapse concurrent callers onto one exchange, per scope.
-  if (!force && _tokenInFlight[key]) return _tokenInFlight[key];
+  // Collapse concurrent callers onto one exchange.
+  if (!force && _tokenInFlight) return _tokenInFlight;
 
-  _tokenInFlight[key] = (async () => {
+  _tokenInFlight = (async () => {
     // OAuth allows the client credentials either in the form body or as HTTP
     // Basic, and servers differ on which they accept. Try the body first, then
     // Basic on a 401 or 403, rather than making the choice a guess.
@@ -114,7 +104,7 @@ async function getAccessToken(env, force = false, scope = null) {
     // defined". Defaulted so no environment variable is needed; TEYA_SCOPE
     // overrides it if more scopes are ever required.
     const form = new URLSearchParams({ grant_type: 'client_credentials' });
-    form.set('scope', want);
+    form.set('scope', env.TEYA_SCOPE || 'checkout/sessions/create');
 
     const attempt = async (url, useBasic) => {
       const body = new URLSearchParams(form);
@@ -155,12 +145,12 @@ async function getAccessToken(env, force = false, scope = null) {
       console.log('teya token endpoint resolved:', winner, 'env', envKey(env));
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
-    _tokens[key] = { value: data.access_token, expires: Date.now() + ttl };
-    return _tokens[key].value;
+    _token = { value: data.access_token, expires: Date.now() + ttl };
+    return _token.value;
   })();
 
-  try { return await _tokenInFlight[key]; }
-  finally { delete _tokenInFlight[key]; }
+  try { return await _tokenInFlight; }
+  finally { _tokenInFlight = null; }
 }
 
 /**
@@ -168,9 +158,9 @@ async function getAccessToken(env, force = false, scope = null) {
  * static bearer when only TEYA_API_KEY is set, so whichever credential shape
  * the portal issues, one of the two paths works.
  */
-async function authHeader(env, force = false, scope = null) {
+async function authHeader(env, force = false) {
   if (env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) {
-    return `Bearer ${await getAccessToken(env, force, scope)}`;
+    return `Bearer ${await getAccessToken(env, force)}`;
   }
   return `Bearer ${env.TEYA_API_KEY}`;
 }
@@ -181,13 +171,13 @@ function paymentsConfigured(env) {
 }
 
 /** Call the Teya API, retrying once on a 401 with a freshly minted token. */
-async function teyaFetch(env, path, init = {}, scope = null) {
+async function teyaFetch(env, path, init = {}) {
   const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
   const send = async (force) => fetch(`${base}${path}`, {
     ...init,
     headers: {
       ...(init.headers || {}),
-      'Authorization': await authHeader(env, force, scope),
+      'Authorization': await authHeader(env, force),
       'Content-Type': 'application/json',
     },
   });
@@ -566,141 +556,78 @@ function _pemToBytes(pem) {
  * the Business Portal. Tries RSA SHA-256 then Ed25519 rather than asking anyone
  * to know which, because the docs page cannot be read.
  */
-async function verifyWithPublicKey(raw, sig, pem) {
-  const sigBytes = _sigBytes(sig);
-  if (!sigBytes) return false;
-  const keyBytes = _pemToBytes(pem);
-  const data = new TextEncoder().encode(raw);
-
-  const attempts = [
-    { alg: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, verify: 'RSASSA-PKCS1-v1_5' },
-    { alg: { name: 'RSA-PSS', hash: 'SHA-256' }, verify: { name: 'RSA-PSS', saltLength: 32 } },
-    { alg: { name: 'Ed25519' }, verify: 'Ed25519' },
-  ];
-  for (const a of attempts) {
-    try {
-      const key = await crypto.subtle.importKey('spki', keyBytes, a.alg, false, ['verify']);
-      if (await crypto.subtle.verify(a.verify, key, sigBytes, data)) return true;
-    } catch { /* wrong algorithm for this key, try the next */ }
-  }
-  return false;
-}
 
 /**
  * Kept at three arguments so index.js needs no change. The third value decides
  * the mode: a PEM public key means asymmetric verification, anything else is
  * treated as an HMAC shared secret.
  */
+/**
+ * Verify a Teya webhook.
+ *
+ * FACT, from a real delivery on 10/08/2026: the header is `x-teya-signature`
+ * and its value is 344 base64 characters, which decodes to 256 bytes. That is
+ * an RSA-2048 signature over the raw body. An HMAC-SHA256 would be 32 bytes,
+ * so the HMAC branch this function used could never have matched and every
+ * webhook was rejected with 401.
+ *
+ * TEYA_WEBHOOK_SECRET must therefore hold Teya's PUBLIC KEY. Accepts it as a
+ * PEM block or as a bare base64 SPKI with the header lines stripped, since it
+ * is easy to paste either. Tries PKCS#1 v1.5 first, then PSS.
+ */
 export async function verifySignature(raw, sig, secret) {
-  if (!secret) return true; // not configured yet - do not hard-fail staging
-  if (!sig) return false;
+  if (!secret) return true;              // not configured - do not hard-fail
+  if (!sig) { console.error('webhook: no signature header'); return false; }
 
-  if (/BEGIN [A-Z ]*PUBLIC KEY/.test(secret)) {
-    return verifyWithPublicKey(raw, sig, secret);
+  let sigBytes;
+  try {
+    sigBytes = Uint8Array.from(atob(sig.trim()), (c) => c.charCodeAt(0));
+  } catch {
+    console.error('webhook: signature is not base64');
+    return false;
   }
 
-  const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(raw));
-  const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  const given = sig.replace(/^sha256=/, '').trim().toLowerCase();
-  if (given.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
+  const body = new TextEncoder().encode(raw);
+  const der = pemToDer(secret);
+  if (!der) {
+    console.error('webhook: TEYA_WEBHOOK_SECRET is not a public key. A',
+                  sigBytes.length + '-byte signature needs Teya\'s RSA public key,',
+                  'not a shared secret.');
+    return false;
+  }
+
+  for (const algo of [
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    { name: 'RSA-PSS', hash: 'SHA-256' },
+  ]) {
+    try {
+      const key = await crypto.subtle.importKey('spki', der, algo, false, ['verify']);
+      const params = algo.name === 'RSA-PSS' ? { name: 'RSA-PSS', saltLength: 32 } : algo.name;
+      if (await crypto.subtle.verify(params, key, sigBytes, body)) {
+        console.log('webhook signature verified with', algo.name);
+        return true;
+      }
+    } catch (e) {
+      console.error('webhook: import/verify failed for', algo.name,
+                    String(e && e.message || e));
+    }
+  }
+  console.error('webhook: signature did not verify against the configured key');
+  return false;
+}
+
+/** Accept a PEM block or a bare base64 SPKI body. */
+function pemToDer(text) {
+  const b64 = String(text)
+    .replace(/-----BEGIN [A-Z ]*-----/g, '')
+    .replace(/-----END [A-Z ]*-----/g, '')
+    .replace(/\s+/g, '');
+  if (b64.length < 100 || /[^A-Za-z0-9+/=]/.test(b64)) return null;
+  try {
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)).buffer;
+  } catch { return null; }
 }
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'Content-Type': 'application/json' },
 });
-
-/**
- * Refund a captured payment in full.
- *
- * POST /v3/refunds, scope refunds/create. Documented 07/08/2026 from the pages
- * Mark pasted; do not "improve" the field names, three earlier guesses at Teya's
- * shapes were all wrong.
- *
- * Two documented behaviours drive the care taken here.
- *
- * 1. A 202 carries NO body. The refund has been accepted, not completed, so it
- *    must not be reported as done. Same for an explicit PENDING.
- * 2. Teya's own wording: repeating the request with a different key, or with no
- *    key, creates a NEW refund. The Idempotency-Key is therefore derived from
- *    the order reference and never randomised, so a double click, a retry or a
- *    second tab cannot refund the customer twice.
- *
- * Returns { ok, state, ... } where state is one of:
- *   refunded  - money returned, done
- *   pending   - accepted by Teya, outcome not yet known, reconcile later
- *   failed    - Teya declined it, reason carried in `reason`
- *   error     - we could not get a usable answer at all
- */
-export async function refundPayment(env, { transaction_id, amount, reference }) {
-  if (!paymentsConfigured(env)) {
-    return { ok: false, state: 'error', error: 'payments not configured' };
-  }
-  if (!transaction_id) {
-    return { ok: false, state: 'error', error: 'no transaction id on this order' };
-  }
-  const value = Math.round(Number(amount) || 0);
-  if (!(value > 0)) {
-    return { ok: false, state: 'error', error: 'refund amount must be positive' };
-  }
-
-  const body = { transaction_id, amount: value };
-  if (reference) body.merchant_reference = reference;
-
-  let res;
-  try {
-    res = await teyaFetch(env, '/v3/refunds', {
-      method: 'POST',
-      // Deterministic: the same order always presents the same key, so Teya
-      // returns the first response rather than creating a second refund.
-      headers: { 'Idempotency-Key': `refund-${reference || transaction_id}` },
-      body: JSON.stringify(body),
-    }, SCOPE_REFUND);
-  } catch (e) {
-    console.error('teya refund threw', String((e && e.message) || e));
-    return { ok: false, state: 'error', error: 'could not reach the payment provider' };
-  }
-
-  // 202 means accepted and still processing, and ships no body at all.
-  if (res.status === 202) {
-    return { ok: true, state: 'pending', http: 202 };
-  }
-
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    console.error('teya refund failed', res.status, JSON.stringify(data).slice(0, 400));
-    const msg = {
-      401: 'the payment provider rejected our credentials',
-      403: 'this credential is not allowed to issue refunds',
-      404: 'the payment provider does not recognise that transaction',
-      409: 'a refund for this order has already been submitted',
-      422: 'the payment provider rejected the refund amount',
-    }[res.status] || 'the payment provider refused the refund';
-    return { ok: false, state: 'error', http: res.status, error: msg,
-             reason: data.status_reason || '' };
-  }
-
-  const status = String(data.status || '').toUpperCase();
-  // The transaction_id coming back is the REFUND's own id, not the payment's.
-  const out = {
-    refund_id: data.transaction_id || '',
-    reason: data.status_reason || '',
-    approval_code: data.issuer_result?.approval_code || '',
-    response_code: data.issuer_result?.response_code || '',
-    amount: data.refund_amount?.amount ?? value,
-    currency: data.refund_amount?.currency || 'GBP',
-    created_at: data.created_at || new Date().toISOString(),
-    raw_status: status,
-  };
-
-  if (status === 'SUCCESS') return { ok: true, state: 'refunded', ...out };
-  if (status === 'PENDING') return { ok: true, state: 'pending', ...out };
-  return { ok: false, state: 'failed', ...out,
-           error: out.reason ? `refund declined (${out.reason})` : 'refund declined' };
-}
