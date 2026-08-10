@@ -919,7 +919,13 @@ export default {
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);
       if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
       if (path === '/order') {
-        return html(await orderConfirmationPage(env, (url.searchParams.get('ref') || '').trim()));
+        // A page that refreshes itself while waiting for the webhook must never
+        // be served from cache, or the customer sits on a stale "still being
+        // confirmed" forever however many times it reloads.
+        return new Response(
+          await orderConfirmationPage(env, (url.searchParams.get('ref') || '').trim()),
+          { headers: { 'Content-Type': 'text/html;charset=utf-8',
+                       'Cache-Control': 'no-store, must-revalidate' } });
       }
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);

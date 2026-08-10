@@ -21,7 +21,11 @@ function shell(title, body) {
 <title>${esc(title)} \u00b7 Drewrys</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
 <meta name="robots" content="noindex,nofollow">
-<link rel="stylesheet" href="/fonts.css">
+<!-- Trimmed font file: only NeueMontreal and Geist, the two faces this page
+     uses. The full fonts.css inlines four families as base64 and is 261KB. -->
+<link rel="preload" as="style" href="/fonts-order.css">
+<link rel="stylesheet" href="/fonts-order.css">
+<link rel="preload" as="image" href="/img/halftone-order.jpg" media="(min-width:761px)">
 <style>
 :root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--ink:#191C21;--peanut:#C79A6B;
   --peanut-deep:#9A6C3E;--slate:#2B3037;--line:rgba(25,28,33,.14);
@@ -29,11 +33,14 @@ function shell(title, body) {
 *{margin:0;padding:0;box-sizing:border-box}
 
 /* The site's first-load screen, so arriving here feels like arriving home. */
-body{background:#f2f1e8 url(/img/halftone.jpg) center/cover no-repeat fixed;
+/* A lighter copy of the halftone for this page only, so the homepage hero
+   keeps its original file. 371KB down to 72KB; it is a soft texture scaled
+   with cover, so the smaller source is indistinguishable. */
+body{background:#f2f1e8 url(/img/halftone-order.jpg) center/cover no-repeat fixed;
   color:var(--ink);
   font-family:"Geist",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100dvh}
-@media(max-width:760px){body{background-image:url(/img/halftone-portrait.jpg)}}
+@media(max-width:760px){body{background-image:url(/img/halftone-order-portrait.jpg)}}
 
 main{max-width:660px;margin:0 auto;padding:clamp(38px,7vh,74px) 22px 90px;
   display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -85,7 +92,7 @@ h2{font-size:clamp(1.12rem,2.4vw,1.35rem);margin-bottom:16px}
 .foot a{color:var(--muted)}
 </style></head><body>
 <main>
-  <a href="/"><img class="mark" src="/img/logo-d.png" alt="Drewrys"></a>
+  <a href="/"><img class="mark" src="/img/logo-d.png" alt="Drewrys" width="168" height="168" fetchpriority="high"></a>
   ${body}
   <div class="foot">
     <a href="/terms">Terms</a><a href="/returns">Returns</a><a href="/privacy">Privacy</a>
@@ -136,7 +143,7 @@ export async function orderConfirmationPage(env, ref) {
 
   const items = (o.items || []).map((i) => `
     <div class="line">
-      ${i.image ? `<img src="${esc(i.image)}" alt="">` : '<img alt="">'}
+      ${i.image ? `<img src="${esc(i.image)}" alt="" width="62" height="62" decoding="async">` : '<img alt="" width="62" height="62">'}
       <div>
         <div class="n">${esc(i.name || '')}</div>
         ${i.size ? `<div class="v">${esc(i.size)}</div>` : ''}
