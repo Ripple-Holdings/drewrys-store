@@ -269,11 +269,53 @@ async function handleReconcile(request, env, url, ctx) {
                 paid: res.paid, result: out });
 }
 
+/**
+ * Record every hit on a webhook path, whatever it is, so "is Teya even calling
+ * us?" stops being a guess. Last 10 kept in KV, readable at
+ * /admin/webhook-log?key=<ADMIN_KEY> - no log tail needed.
+ */
+async function logHook(env, entry) {
+  try {
+    const raw = await env.DREWRYS_KV.get('webhook:log');
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift({ at: new Date().toISOString(), ...entry });
+    await env.DREWRYS_KV.put('webhook:log', JSON.stringify(list.slice(0, 10)),
+                             { expirationTtl: 60 * 60 * 24 * 30 });
+  } catch (e) { console.error('logHook failed', String(e && e.message || e)); }
+}
+
+async function handleWebhookLog(request, env, url) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+  const raw = await env.DREWRYS_KV.get('webhook:log');
+  return json({ hits: raw ? JSON.parse(raw) : [],
+                note: 'empty means nothing has ever hit a webhook path on this Worker' });
+}
+
 async function handleWebhook(request, env, ctx) {
+  // A verification ping is often a GET, and a GET here used to fall through to
+  // the asset handler and 404, which would make Teya reject the URL at save
+  // time with nothing logged anywhere.
+  if (request.method !== 'POST') {
+    await logHook(env, { method: request.method, path: new URL(request.url).pathname,
+                         note: 'non-POST, answered 200' });
+    return new Response('ok', { status: 200 });
+  }
+
   const raw = await request.text();
+  await logHook(env, {
+    method: 'POST',
+    path: new URL(request.url).pathname,
+    headers: Object.fromEntries([...request.headers].filter(([k]) =>
+      /teya|signature|content-type|user-agent/i.test(k))),
+    body: raw.slice(0, 900),
+  });
   const sig = request.headers.get('teya-signature') || request.headers.get('x-teya-signature');
   if (!(await verifySignature(raw, sig, env.TEYA_WEBHOOK_SECRET))) {
     console.error('webhook REJECTED: signature check failed. header present:', Boolean(sig));
+    await logHook(env, { result: 'REJECTED, signature check failed',
+                         signatureHeaderPresent: Boolean(sig),
+                         secretConfigured: Boolean(env.TEYA_WEBHOOK_SECRET) });
     return new Response('bad signature', { status: 401 });
   }
 
@@ -293,6 +335,7 @@ async function handleWebhook(request, env, ctx) {
   const { reference, via } = await resolveReference(env, event);
   if (!reference) {
     console.error('webhook UNMATCHED:', via, '- raw:', raw.slice(0, 600));
+    await logHook(env, { result: 'UNMATCHED', why: via });
     return new Response('ok', { status: 200 });
   }
   console.log('webhook matched order', reference, 'via', via);
@@ -308,6 +351,8 @@ async function handleWebhook(request, env, ctx) {
   }
   const out = await settleOrder(env, ctx, reference, looksGood && Boolean(txn), txn);
   if (!out.ok) console.warn('webhook for unknown order', reference);
+  await logHook(env, { result: 'MATCHED', reference, via, status, transaction_id: txn,
+                       settled: out });
   return new Response('ok', { status: 200 });
 }
 
@@ -775,7 +820,12 @@ export default {
         return json({ ...cat, stock: await stockMap(env, cat.products) });
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
-      if (path === '/webhook' && request.method === 'POST') return handleWebhook(request, env, ctx);
+      // Accept every path Teya might have been pointed at. A mismatch used to
+      // 404 into the asset handler and leave no trace at all.
+      if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {
+        return handleWebhook(request, env, ctx);
+      }
+      if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);
       if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);
