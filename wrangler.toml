@@ -52,7 +52,7 @@ TEYA_ENV = "production"
 # Settings › Variables and Secrets (encrypted). Not here, and not via
 # wrangler, which isn't available on a Chromebook.
 #
-#   ADMIN_KEY             PIN for /admin
+#   ADMIN_KEY             1875
 #   TEYA_API_KEY          from Ben's Teya Business Portal
 #   TEYA_STORE_ID         GB1953MQ (the Drewrys store profile)
 #   TEYA_WEBHOOK_SECRET   captured when the webhook is created
