@@ -57,5 +57,5 @@ TEYA_ENV = "production"
 #   TEYA_STORE_ID         GB1953MQ (the Drewrys store profile)
 #   TEYA_WEBHOOK_SECRET   captured when the webhook is created
 #   SENDGRID_API_KEY      order emails
-#   SHOP_ORDER_EMAIL      where Ben receives order notifications
-#   SHOP_FROM_EMAIL       verified SendGrid sender
+#   SHOP_ORDER_EMAIL      "noreply@drewrys.store"
+#   SHOP_FROM_EMAIL       "hello@drewrys.store"
