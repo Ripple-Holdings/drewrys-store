@@ -464,6 +464,11 @@ export async function createSession(request, env) {
 
   // Documented response: session_id, session_token, session_url, session_status.
   // The older keys are kept as a fallback in case the field is ever renamed.
+  // Log which keys Teya echoed. If success_url is absent from the response it
+  // was ignored, which would explain a checkout that ends on Teya's own page.
+  console.log('teya session response keys:', JSON.stringify(Object.keys(data)),
+              'success_url echoed:', Boolean(data.success_url || data.return_url));
+
   const url = data.session_url || data.checkout_url || data.url || data.redirect_url;
   if (!url) {
     console.error('no session url from teya', JSON.stringify(data).slice(0, 400));
