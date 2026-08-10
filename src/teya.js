@@ -427,8 +427,16 @@ export async function createSession(request, env) {
     store_id: env.TEYA_STORE_ID,
     amount: { value: basket.total, currency: 'GBP' },
     type: 'SALE',
-    success_url: `${origin}/?paid=1&ref=${reference}`,
-    cancel_url: `${origin}/?cancelled=1&ref=${reference}`,
+    // redirect_url is the field named in Teya's own API reference example
+    // (10/08/2026), and their sample value points at a merchant "processing"
+    // page, which is what an automatic redirect after payment looks like.
+    // success_url and cancel_url stay: they are what the "Back to store"
+    // button has been using, and if they are not in Teya's schema they are
+    // ignored rather than rejected - sessions have been creating fine with
+    // them present all along.
+    redirect_url: `${origin}/order?ref=${reference}`,
+    success_url: `${origin}/order?ref=${reference}`,
+    cancel_url: `${origin}/checkout?cancelled=1&ref=${reference}`,
   };
 
   // Last line of defence: if the arithmetic does not reconcile for any reason,
@@ -444,6 +452,20 @@ export async function createSession(request, env) {
   // here escapes the Worker and Cloudflare answers with an HTML error page - so
   // the browser gets "Unexpected token '<'" instead of a usable message. Catch
   // it and answer in JSON like every other failure on this path.
+  // TEYA_EXTRA_SESSION_JSON lets an undocumented session field be tried from
+  // the Cloudflare dashboard without a code push, e.g. {"auto_redirect":true}.
+  // Teya's own response then says whether the field exists. Unset, nothing
+  // changes. Bad JSON is ignored rather than breaking checkout.
+  if (env.TEYA_EXTRA_SESSION_JSON) {
+    try {
+      Object.assign(body, JSON.parse(env.TEYA_EXTRA_SESSION_JSON));
+      console.log('teya session: merged extra fields',
+                  JSON.stringify(Object.keys(JSON.parse(env.TEYA_EXTRA_SESSION_JSON))));
+    } catch (e) {
+      console.error('TEYA_EXTRA_SESSION_JSON is not valid JSON, ignored');
+    }
+  }
+
   let res;
   try {
     res = await teyaFetch(env, '/v2/checkout/sessions', {

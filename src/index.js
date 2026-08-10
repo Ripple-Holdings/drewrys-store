@@ -27,6 +27,7 @@ import { REVIEW_DEFAULTS, livePlatforms, newToken, reviewId, queueReviewRequest,
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
+import { orderConfirmationPage } from './confirmation.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
@@ -118,9 +119,26 @@ async function decrementStock(env, order) {
   }
 }
 
+/** A readable text version of an HTML email, for the multipart alternative. */
+function toPlainText(markup) {
+  return String(markup || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|h1|h2|h3|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&pound;/g, '\u00a3')
+    .split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim())
+    .filter((l, i, a) => l || (a[i - 1] || '').length)
+    .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 async function sendEmail(env, { to, subject, html: bodyHtml }) {
   if (!env.SENDGRID_API_KEY || !to) return false;
   const from = env.SHOP_FROM_EMAIL || 'orders@drewrys.store';
+  const replyTo = env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL || '';
   const r = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
@@ -130,8 +148,17 @@ async function sendEmail(env, { to, subject, html: bodyHtml }) {
     body: JSON.stringify({
       personalizations: [{ to: [{ email: to }] }],
       from: { email: from, name: env.SHOP_NAME || 'Drewrys' },
+      // Replies to a noreply address are a customer-service own goal, and a
+      // missing Reply-To is itself a spam signal.
+      reply_to: replyTo ? { email: replyTo, name: env.SHOP_NAME || 'Drewrys' } : undefined,
       subject,
-      content: [{ type: 'text/html', value: bodyHtml }],
+      // A plain-text alternative must come FIRST in this array. HTML with no
+      // text part is one of the commonest reasons a properly authenticated
+      // domain still lands in junk.
+      content: [
+        { type: 'text/plain', value: toPlainText(bodyHtml) },
+        { type: 'text/html', value: bodyHtml },
+      ],
     }),
   });
   if (!r.ok) console.error('sendgrid', r.status, await r.text().catch(() => ''));
@@ -891,6 +918,9 @@ export default {
       if (path === '/admin/diag') return handleDiag(request, env, url);
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);
       if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
+      if (path === '/order') {
+        return html(await orderConfirmationPage(env, (url.searchParams.get('ref') || '').trim()));
+      }
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);
       if (path === '/privacy') return html(PRIVACY);
