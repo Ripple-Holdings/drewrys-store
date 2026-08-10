@@ -15,6 +15,7 @@
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
   getIngredients, DEFAULT_SETTINGS,
+  refundPayment,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
@@ -28,6 +29,7 @@ import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
+import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail } from './refunds.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
 
@@ -209,6 +211,13 @@ async function handleWebhook(request, env, ctx) {
 
   order.status = paid ? 'paid' : 'failed';
   order.settled = new Date().toISOString();
+  // Without this no refund can ever be issued for the order: /v3/refunds is
+  // keyed on the ORIGINAL payment's transaction id and Teya does not accept a
+  // session id or our own reference in its place.
+  const txn = event.transaction_id || event.data?.transaction_id ||
+              event.payment?.transaction_id || event.data?.payment?.transaction_id || '';
+  if (txn) order.transaction_id = txn;
+  else if (paid) console.warn('paid webhook carried no transaction id', reference);
   // A pending checkout expires in 90 days; a PAID one is an accounting record
   // and has to outlive that. Six years plus the current year, per the privacy
   // policy and IoM record-keeping requirements.
@@ -486,6 +495,126 @@ async function fulfilOrder(env, body) {
   return json({ ok: true, order, emailed: false });
 }
 
+/* ── refunds ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Refund an order in full and put it right on our side.
+ *
+ * Full only, by decision: Teya supports partial refunds but the shop does not
+ * offer them, so the amount is always the order total and never comes from the
+ * browser. That also means a refunded order can never be refunded again, which
+ * is enforced here as well as by the deterministic idempotency key in teya.js.
+ *
+ * Order of operations matters. The money moves FIRST; stock, email and status
+ * only follow a confirmed success. A pending refund changes nothing except a
+ * marker, because telling Ben stock is back when the refund may still fail
+ * would put the shop out of step with reality.
+ */
+async function refundOrder(env, body) {
+  const ref = String(body.reference || '').slice(0, 40);
+  if (!ref) return json({ error: 'no reference' }, 400);
+
+  const raw = await env.DREWRYS_KV.get(`order:${ref}`);
+  if (!raw) return json({ error: 'order not found' }, 404);
+  const order = JSON.parse(raw);
+
+  if (order.refund && order.refund.state === 'refunded') {
+    return json({ error: 'this order has already been refunded' }, 409);
+  }
+  if (order.refund && order.refund.state === 'pending') {
+    return json({ error: 'a refund for this order is already in progress' }, 409);
+  }
+  if (!['paid', 'ready', 'collected', 'dispatched'].includes(order.status)) {
+    return json({ error: 'only a paid order can be refunded' }, 400);
+  }
+  if (!order.transaction_id) {
+    return json({ error: 'no payment transaction is recorded against this order, ' +
+                         'so it has to be refunded in the Teya portal' }, 409);
+  }
+
+  const reason = String(body.reason || '').slice(0, 40);
+  if (!RETURN_REASONS.some((r) => r.id === reason)) {
+    return json({ error: 'choose a reason for the return' }, 400);
+  }
+  const restock = body.restock === true;
+  const noRestockReason = String(body.no_restock_reason || '').slice(0, 40);
+  if (!restock && !NO_RESTOCK_REASONS.some((r) => r.id === noRestockReason)) {
+    return json({ error: 'say why the stock cannot be sold again' }, 400);
+  }
+  const note = String(body.note || '').trim().slice(0, 400);
+
+  const result = await refundPayment(env, {
+    transaction_id: order.transaction_id,
+    amount: order.total,                 // full only, and ours not the browser's
+    reference: ref,
+  });
+
+  order.refund = {
+    state: result.state,                 // refunded | pending | failed | error
+    amount: order.total,
+    reason,
+    reason_label: reasonLabel(RETURN_REASONS, reason),
+    restock,
+    no_restock_reason: restock ? '' : noRestockReason,
+    no_restock_label: restock ? '' : reasonLabel(NO_RESTOCK_REASONS, noRestockReason),
+    note,
+    refund_id: result.refund_id || '',
+    requested: new Date().toISOString(),
+    ...(result.state === 'refunded' ? { completed: new Date().toISOString() } : {}),
+    ...(result.error ? { error: result.error } : {}),
+    ...(result.reason ? { decline_reason: result.reason } : {}),
+  };
+
+  // A failed attempt is still recorded, so Ben can see it was tried and why it
+  // did not go through rather than clicking into silence.
+  if (result.state === 'refunded') order.status = 'refunded';
+
+  await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
+    { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+
+  if (result.state !== 'refunded') {
+    return json({
+      ok: result.state === 'pending',
+      state: result.state,
+      order,
+      error: result.error || (result.state === 'pending'
+        ? 'Teya has accepted the refund but not confirmed it yet. It will show as '
+          + 'pending until confirmed.'
+        : 'the refund did not go through'),
+    }, result.state === 'pending' ? 200 : 502);
+  }
+
+  if (restock) await restoreStock(env, order);
+
+  let emailed = false;
+  if (order.customer?.email) {
+    emailed = await sendEmail(env, {
+      to: order.customer.email,
+      subject: `Your Drewrys order ${ref} has been refunded`,
+      html: refundEmail(order, {
+        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        shopName: env.SHOP_NAME || 'Drewrys',
+      }),
+    });
+    if (emailed) {
+      order.refund.emailed = new Date().toISOString();
+      await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
+        { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+    }
+  }
+
+  return json({ ok: true, state: 'refunded', order, emailed });
+}
+
+/** The mirror of decrementStock. Unlimited lines are left alone, as there. */
+async function restoreStock(env, order) {
+  for (const item of order.items || []) {
+    const cur = await getStock(env, item.sku);
+    if (cur === null) continue;
+    await env.DREWRYS_KV.put(`stock:${item.sku}`, String(cur + (item.quantity || 0)));
+  }
+}
+
 /** Uploaded product photos are stored in KV and served from /media/<slug>. */
 async function saveImage(env, slug, dataUrl) {
   const m = /^data:(image\/(?:png|jpeg|webp|svg\+xml));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
@@ -538,6 +667,7 @@ async function handleAdmin(request, env, url) {
     // order actions are immediate, not part of the save-draft flow
     if (body.order) return fulfilOrder(env, body.order);
     if (body.review) return moderateReview(env, body.review);
+    if (body.refund) return refundOrder(env, body.refund);
 
     // Photos first, so the catalogue can be written with their final URLs.
     const savedImages = {};
@@ -652,6 +782,8 @@ async function handleAdmin(request, env, url) {
     reviews: await getReviews(env),
     platforms: livePlatforms(adminSettings),
     promo_uses: await getPromoUses(env),
+    return_reasons: RETURN_REASONS,
+    no_restock_reasons: NO_RESTOCK_REASONS,
   }));
 }
 
