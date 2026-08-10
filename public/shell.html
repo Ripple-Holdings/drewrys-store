@@ -1193,7 +1193,11 @@ function renderCart(){
   const body=document.getElementById('cartBody');
   const keys=Object.keys(CART);
   if(!keys.length){
-    body.innerHTML='<p class="cart-empty">Your bag is empty.</p>';
+    body.innerHTML = CONFIRMED
+      ? '<div class="cart-empty"><p><strong>Thank you, your order is confirmed.</strong></p>'
+        + (ORDER_REF ? '<p>Order '+ORDER_REF+'</p>' : '')
+        + '<p>A confirmation email is on its way.</p></div>'
+      : '<p class="cart-empty">Your bag is empty.</p>';
   } else {
     body.innerHTML=keys.map(i=>{const p=PRODUCTS[i],q=CART[i];return `
       <div class="ci">
@@ -1221,8 +1225,13 @@ function renderCart(){
   } else dr.hidden=true;
   document.getElementById('tTotal').textContent=money(Math.max(0,sub-disc));
   const btn=document.getElementById('checkoutBtn');
-  btn.disabled=!keys.length;
-  btn.textContent='Checkout';
+  // CONFIRMED survives a re-render. Without it the paid handler set the button
+  // to "Order confirmed" and then called openCart(), which calls renderCart()
+  // again and put it straight back to a disabled "Checkout" - so a paid
+  // customer saw nothing but an empty bag.
+  btn.disabled = CONFIRMED ? true : !keys.length;
+  btn.textContent = CONFIRMED ? 'Order confirmed' : 'Checkout';
+  if(CONFIRMED) btn.style.background='var(--peanut-deep)';
 }
 
 // drawer
@@ -1253,6 +1262,8 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeCart();});
    behaves as it does in the mockup. SKUs must match CATALOGUE in the worker. */
 const TEYA = { endpoint:'', skus:['matte-clay','sea-salt-spray','fibre','paste','creme','form','rejuvenating-shampoo','elijah'] };
 
+let CONFIRMED=false;
+
 document.getElementById('checkoutBtn').addEventListener('click',function(){
   if(!Object.keys(CART).length) return;
   saveCart();
@@ -1260,19 +1271,21 @@ document.getElementById('checkoutBtn').addEventListener('click',function(){
 });
 
 /* Teya sends the customer back with ?paid=1 or ?cancelled=1 */
+var ORDER_REF='';
 (function(){
   const q=new URLSearchParams(location.search);
   if(!q.has('paid')&&!q.has('cancelled')) return;
   const done=q.has('paid');
+  ORDER_REF=q.get('ref')||'';
   addEventListener('load',()=>{
-    const btn=document.getElementById('checkoutBtn');
-    if(!btn) return;
     if(done){
+      CONFIRMED=true;
       for(const k in CART) delete CART[k];
-      PROMO=null; renderCart();
-      btn.innerHTML='Order confirmed'; btn.style.background='var(--peanut-deep)';
+      PROMO=null;
+      try{ localStorage.removeItem(CART_KEY); localStorage.removeItem('drw_promo'); }catch(e){}
     }
-    if(typeof openCart==='function') openCart();
+    // openCart() re-renders, so set the state BEFORE opening, never after
+    if(typeof openCart==='function') openCart(); else renderCart();
     history.replaceState({},'',location.pathname);
   });
 })();
