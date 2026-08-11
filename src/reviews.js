@@ -309,7 +309,7 @@ p{color:rgba(25,28,33,.6);font-size:.95rem}
 a{color:#9A6C3E;font-weight:600;display:inline-block;margin-top:16px}
 </style></head><body><div>
 <h1>${esc(message)}</h1>
-<p>If you think that is wrong, just reply to the email we sent you.</p>
+<p>If you think that is wrong, email us at hello@drewrys.store.</p>
 <a href="/">Back to the shop</a>
 </div></body></html>`;
 }

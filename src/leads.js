@@ -202,8 +202,8 @@ ${ok
      <p>${esc(email)} has been removed from the list and we have deleted the
      record. You will not hear from us again unless you sign up afresh.</p>`
   : `<h1>That link did not work.</h1>
-     <p>It may have been cut short by your email app. Reply to any of our
-     emails and we will take you off the list by hand.</p>`}
+     <p>It may have been cut short by your email app. Email us at
+     hello@drewrys.store and we will take you off the list by hand.</p>`}
 <a class="btn" href="/">Back to the shop</a>
 </div></body></html>`;
 }

@@ -358,7 +358,8 @@ ${who}
 <ul>
   <li><strong>Newsletter.</strong> If you type your email into the footer, we
   store that email address and the date, and nothing else. Every email we send
-  carries a one-click unsubscribe, and you can also just reply and ask.</li>
+  carries a one-click unsubscribe, and you can also email
+  hello@drewrys.store and ask.</li>
   <li><strong>Messages.</strong> If you use the contact or wholesale form we
   keep your name, email and what you wrote, so we can answer you.</li>
   <li><strong>Reviews.</strong> If you leave one we store your rating, your

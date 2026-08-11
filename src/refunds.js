@@ -64,19 +64,19 @@ export function refundEmail(order, opts = {}) {
     ${E.masthead(origin)}
     ${E.heading('Refund issued')}
     <tr><td style="padding:14px 28px 0;font-family:${E.SANS};font-size:15px;line-height:1.6;color:${E.INK}">
-      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', we' : 'We'} have refunded
-      <strong>${E.gbp(amount)}</strong> to the card you paid with.
+      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', a' : 'A'} refund of
+      <strong>${E.gbp(amount)}</strong> has been raised for your order and is on its
+      way back to the card you paid with.
     </td></tr>
     ${E.factRow('Order number', E.esc(order.reference),
                 'Refunded', E.esc(E.niceDate(order.refund?.at || new Date().toISOString())))}
     ${(order.items || []).map((i) => E.itemBlock(origin, i)).join('')}
-    ${E.totalsBlock(order)}
+    ${E.totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${E.SANS};font-size:13.5px;line-height:1.6;color:${E.MUTED}">
       Refunds usually show within three to five working days, sometimes a little
-      longer depending on your bank. If it has not appeared after a week, reply
-      to this email and we will chase it.
+      longer depending on your bank.
     </td></tr>
-    ${E.footNote(contact)}
+    ${E.footNote(contact, opts.settings)}
   `);
 }
 
@@ -95,19 +95,17 @@ export function cancelledEmail(order, opts = {}) {
     ${E.masthead(origin)}
     ${E.heading('Order cancelled')}
     <tr><td style="padding:14px 28px 0;font-family:${E.SANS};font-size:15px;line-height:1.6;color:${E.INK}">
-      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', we' : 'We'} are sorry, we have had to
-      cancel this order before it went out. Nothing has been sent, and we have
-      refunded <strong>${E.gbp(amount)}</strong> to the card you paid with.
+      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', your' : 'Your'} order has been
+      cancelled. Nothing has been sent, and <strong>${E.gbp(amount)}</strong> is on its
+      way back to the card you paid with.
     </td></tr>
     ${E.factRow('Order number', E.esc(order.reference),
                 'Cancelled', E.esc(E.niceDate(order.refund?.at || new Date().toISOString())))}
     ${(order.items || []).map((i) => E.itemBlock(origin, i)).join('')}
-    ${E.totalsBlock(order)}
+    ${E.totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${E.SANS};font-size:13.5px;line-height:1.6;color:${E.MUTED}">
-      Refunds usually show within three to five working days. If you still want
-      these, everything is on the site and you are welcome to order again, or
-      reply to this email and we will sort it out with you.
+      Refunds usually show within three to five working days.
     </td></tr>
-    ${E.footNote(contact)}
+    ${E.footNote(contact, opts.settings)}
   `);
 }

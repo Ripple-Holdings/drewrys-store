@@ -71,10 +71,23 @@ function masthead(origin) {
   </td></tr>`;
 }
 
-function footNote(email) {
+function footNote(email, settings) {
+  // The company line makes the receipt email a valid SIMPLIFIED VAT invoice
+  // for sales up to £250 (seller name, address and VAT number joining the
+  // date, items, rate and gross already present), and satisfies the
+  // company-details rules for business emails generally. The VAT number
+  // comes from settings so unticking VAT registered removes it everywhere.
+  const s = settings || {};
+  const vatNo = s.vat_registered === true ? String(s.vat_number || '').trim() : '';
   return `<tr><td style="padding:2px 28px 20px;font-family:${SANS};font-size:12.5px;
-    line-height:1.6;color:${MUTED}">For any customer service enquiries please get in touch at
+    line-height:1.6;color:${MUTED}">Please do not reply to this email - replies to this
+    address are not read. If you need any help, email us at
     <a href="mailto:${esc(email)}" style="color:${PEANUT};text-decoration:underline">${esc(email)}</a>.
+  </td></tr>
+  <tr><td style="padding:0 28px 22px;font-family:${SANS};font-size:11.5px;
+    line-height:1.6;color:${MUTED}">Drewrys is the trading name of DGG Limited,
+    company number 130898C. Falcon House, 22 Ridgeway Street, Douglas,
+    Isle of Man, IM1 1EL.${vatNo ? ' VAT registration ' + esc(vatNo) + '.' : ''}
   </td></tr>`;
 }
 
@@ -240,7 +253,7 @@ export function confirmationEmails(order, opts = {}) {
       ${collect ? 'You will get a second email, headed Ready to collect, when it is packed.'
                 : 'We will email you again with tracking as soon as it leaves us.'}
     </td></tr>
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 
   const owner = shell(`
@@ -277,7 +290,7 @@ export function readyEmail(order, opts = {}) {
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
       Bring your order number, ${esc(order.reference)}, with you.
     </td></tr>
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 }
 
@@ -299,9 +312,9 @@ export function collectedEmail(order, opts = {}) {
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
     ${totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
-      Keep this for your records. If anything is not right, just reply to this email.
+      Keep this for your records.
     </td></tr>
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 }
 
@@ -326,7 +339,7 @@ export function reviewRequestEmail(order, opts = {}) {
           <a href="${link}" style="display:inline-block;padding:15px 32px;font-family:${SANS};
             font-size:15px;font-weight:700;color:${COTTON};text-decoration:none">Leave a review</a>
         </td></tr></table></td></tr>
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 }
 
@@ -369,7 +382,7 @@ export function publicReviewInviteEmail(review, opts = {}) {
       ${platforms.map((p) => `<a href="${esc(p.url)}" style="color:${PEANUT};font-weight:700;
         text-decoration:underline;padding:0 6px">${esc(p.name)}</a>`).join(' ')}
     </td></tr>` : ''}
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 }
 
@@ -404,7 +417,7 @@ export function dispatchedEmail(order, opts = {}) {
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
       Tracking can take a few hours to show its first scan.
     </td></tr>
-    ${footNote(contact)}
+    ${footNote(contact, opts.settings)}
   `);
 }
 
