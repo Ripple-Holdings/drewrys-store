@@ -757,6 +757,16 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
   border-radius:20px;display:grid;grid-template-columns:1fr 1fr;
   box-shadow:0 30px 80px -30px rgba(25,28,33,.6);transform:translateY(14px) scale(.985);
   transition:transform .28s cubic-bezier(.2,.7,.3,1)}
+/* The contact box never scrolls: the form is a flex column and the MESSAGE
+   FIELD is the part that gives, growing on tall screens and shrinking on
+   short ones, so everything from the logo to Send always fits inside 92dvh.
+   overflow:auto above survives only as a guard for absurdly short windows
+   (a landscape phone), where a scroll beats a cut-off Send button. */
+.mbox--fit{height:min(660px,92dvh)}
+.mbox--fit .mmain{display:flex;flex-direction:column;min-height:0}
+.mbox--fit #mcForm{display:flex;flex-direction:column;flex:1;min-height:0}
+.mbox--fit .mfield--grow{display:flex;flex-direction:column;flex:1;min-height:0}
+.mbox--fit .mfield--grow textarea{flex:1;min-height:64px;resize:none}
 .modal.open .mbox{transform:none}
 .mbox--sm{grid-template-columns:1fr;width:min(440px,100%);text-align:center}
 .mside{position:relative;background:var(--slate);overflow:hidden;border-radius:20px 0 0 20px}
@@ -808,6 +818,15 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 @media(max-width:820px){
   .mbox{grid-template-columns:1fr}
   .mside{display:none}
+}
+@media(max-height:760px){
+  .mmain{padding:20px 24px}
+  .mmain .mlogo{width:36px;margin-bottom:10px}
+  .mmain .msub{margin-top:6px;font-size:.92rem}
+  .mfield{margin-top:10px}
+  .mfield input,.mfield textarea{padding:10px 12px}
+  .msend{margin-top:12px;padding:12px}
+  .mnote{margin-top:8px}
 }
 </style></style>
 </head>
@@ -2293,7 +2312,7 @@ let r=null, mounted=true;
 <div class="mscrim" id="mScrim" aria-hidden="true"></div>
 
 <div class="modal" id="mContact" role="dialog" aria-modal="true" aria-labelledby="mcTitle" hidden>
-  <div class="mbox">
+  <div class="mbox mbox--fit">
     <div class="mside">
       <img src="/img/hero-1.jpg" alt="">
       <div class="mquote" id="mQuote" hidden>
@@ -2317,7 +2336,7 @@ let r=null, mounted=true;
           <input id="mcName" type="text" placeholder="Your name" autocomplete="name"></div>
         <div class="mfield"><label for="mcMail">Email</label>
           <input id="mcMail" type="email" placeholder="you@email.com" autocomplete="email"></div>
-        <div class="mfield"><label for="mcMsg">Message</label>
+        <div class="mfield mfield--grow"><label for="mcMsg">Message</label>
           <textarea id="mcMsg" placeholder="How can we help you?"></textarea></div>
         <input type="text" id="mcHp" tabindex="-1" autocomplete="off" aria-hidden="true"
           style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
