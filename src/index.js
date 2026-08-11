@@ -14,7 +14,7 @@
 
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
-  getIngredients, getSessionStatus, refundPayment, tokenDiagnostic, DEFAULT_SETTINGS,
+  getIngredients, getSessionStatus, refundPayment, tokenDiagnostic, pathProbe, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
@@ -1172,6 +1172,13 @@ export default {
       }
       if (path === '/admin/order') return handleOrderPeek(request, env, url);
       if (path === '/admin/teya-token') return handleTokenDiag(request, env, url);
+      if (path === '/admin/teya-paths') {
+        const k = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+        if (!env.ADMIN_KEY || k !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+        return new Response(JSON.stringify(await pathProbe(env), null, 2),
+          { headers: { 'Content-Type': 'application/json;charset=utf-8',
+                       'Cache-Control': 'no-store' } });
+      }
       if (path === '/admin/vat') return handleVatReport(request, env, url);
       if (path === '/admin/diag') return handleDiag(request, env, url);
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);

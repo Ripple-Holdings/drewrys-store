@@ -920,3 +920,65 @@ export async function tokenDiagnostic(env, scope = SCOPE_REFUND, sample = {}) {
 
   return out;
 }
+
+
+/**
+ * Is /v3/refunds a path this gateway knows about?
+ *
+ * A bare 403 with no body is the same signature we hit during the OAuth work,
+ * where it turned out to be the gateway refusing an UNKNOWN PATH rather than
+ * the server refusing a credential. This settles which it is without creating
+ * a refund, by comparing three GETs with the same refunds/create token:
+ *
+ *   a path we KNOW exists   /v2/checkout/sessions
+ *   the path in question    /v3/refunds
+ *   a path that cannot      /v3/definitely-not-a-real-path-xyz
+ *
+ * GET creates nothing. A path that exists but does not accept GET answers 405,
+ * which is itself the proof that the path is there.
+ */
+export async function pathProbe(env) {
+  const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
+  const paths = [
+    ['known good', '/v2/checkout/sessions'],
+    ['the one we use', '/v3/refunds'],
+    ['deliberate nonsense', '/v3/definitely-not-a-real-path-xyz'],
+    ['refunds without a version', '/refunds'],
+    ['v2 refunds', '/v2/refunds'],
+  ];
+  const out = { base, scope_used: SCOPE_REFUND, results: [] };
+
+  for (const [label, path] of paths) {
+    let entry = { label, path, status: null, body: '', note: '' };
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': await authHeader(env, false, SCOPE_REFUND),
+          'Content-Type': 'application/json',
+        },
+      });
+      entry.status = res.status;
+      const txt = await res.text().catch(() => '');
+      entry.body = txt ? txt.slice(0, 200) : '(empty)';
+      entry.note = res.status === 405
+        ? 'the path EXISTS, it just does not take GET'
+        : (res.status === 404 ? 'gateway does not know this path'
+          : (res.status === 403 && !txt ? 'bare 403, no body'
+            : (res.status === 401 ? 'path exists, credential rejected' : '')));
+    } catch (e) {
+      entry.note = 'threw: ' + String(e && e.message || e);
+    }
+    out.results.push(entry);
+  }
+
+  const known = out.results[0];
+  const ours = out.results[1];
+  const nonsense = out.results[2];
+  out.verdict = (ours.status === nonsense.status && ours.body === nonsense.body)
+    ? 'OUR PATH LOOKS THE SAME AS A PATH THAT DOES NOT EXIST. /v3/refunds is very likely the wrong URL.'
+    : (ours.status === 405
+      ? 'the path exists and takes a different method, so the URL is right and the 403 on POST is about permission or payload'
+      : 'inconclusive from the shape alone, read the three rows');
+  return out;
+}
