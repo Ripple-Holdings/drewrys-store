@@ -14,7 +14,7 @@
 
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
-  getIngredients, getSessionStatus, refundPayment, DEFAULT_SETTINGS,
+  getIngredients, getSessionStatus, refundPayment, tokenDiagnostic, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
@@ -365,6 +365,28 @@ async function logHook(env, entry) {
  * does not carry the delivery zone and the zone is what decides whether a sale
  * is standard-rated or a zero-rated export.
  */
+/**
+ * GET /admin/teya-token?scope=refunds/create&key=<ADMIN_KEY>
+ *
+ * Produces the four things Teya support asked for and nothing else. The access
+ * token is redacted before it leaves the Worker, so the output is safe to paste
+ * into a support chat.
+ */
+async function handleTokenDiag(request, env, url) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+
+  const scope = url.searchParams.get('scope') || 'refunds/create';
+  const out = await tokenDiagnostic(env, scope, {
+    transaction_id: url.searchParams.get('txn') || '',
+    merchant_reference: url.searchParams.get('ref') || '',
+    amount: url.searchParams.get('amount') || '',
+  });
+  return new Response(JSON.stringify(out, null, 2), {
+    headers: { 'Content-Type': 'application/json;charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 async function handleVatReport(request, env, url) {
   const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
@@ -1105,6 +1127,7 @@ export default {
       if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {
         return handleWebhook(request, env, ctx);
       }
+      if (path === '/admin/teya-token') return handleTokenDiag(request, env, url);
       if (path === '/admin/vat') return handleVatReport(request, env, url);
       if (path === '/admin/diag') return handleDiag(request, env, url);
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);

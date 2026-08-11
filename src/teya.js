@@ -810,3 +810,89 @@ export async function refundPayment(env, { transactionId, amount, reference }) {
            amount_settled: settled,
            status: status || 'SUCCESS' };
 }
+
+
+/**
+ * Exactly what Teya support asked for on 11/08/2026, and nothing more.
+ *
+ * Mints a FRESH token for the requested scope, bypassing the cache, and returns
+ * the whole token response with the token value REDACTED so the `scope` field
+ * can be read. Also returns the environment, the first six characters of the
+ * client id, and the refund request as a cURL with the secret and the token
+ * removed.
+ *
+ * The access token never appears in the output. It is a bearer credential: one
+ * that leaks into a chat log or a screenshot is a live key until it expires.
+ */
+export async function tokenDiagnostic(env, scope = SCOPE_REFUND, sample = {}) {
+  const isProd = env.TEYA_ENV === 'production';
+  const api = API[isProd ? 'production' : 'staging'];
+  const out = {
+    environment: api,
+    token_endpoint: null,
+    client_id_first_six: String(env.TEYA_CLIENT_ID || '').slice(0, 6) || '(not set)',
+    store_id: env.TEYA_STORE_ID || '(not set)',
+    scope_requested: scope,
+    token_response: null,
+    refund_curl: null,
+    error: null,
+  };
+
+  const urls = tokenCandidates(env);
+  const form = new URLSearchParams({ grant_type: 'client_credentials' });
+  form.set('scope', scope);
+
+  for (const url of urls) {
+    for (const useBasic of [false, true]) {
+      const body = new URLSearchParams(form);
+      const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      if (useBasic) {
+        headers.Authorization = 'Basic ' +
+          btoa(`${env.TEYA_CLIENT_ID}:${env.TEYA_CLIENT_SECRET}`);
+      } else {
+        body.set('client_id', env.TEYA_CLIENT_ID);
+        body.set('client_secret', env.TEYA_CLIENT_SECRET);
+      }
+      let r; let data = {};
+      try {
+        r = await fetch(url, { method: 'POST', headers, body: body.toString() });
+        data = await r.json().catch(() => ({}));
+      } catch (e) {
+        out.error = String(e && e.message || e);
+        continue;
+      }
+      if (data.access_token || data.error) {
+        out.token_endpoint = url;
+        out.auth_style = useBasic ? 'HTTP Basic' : 'client_id and client_secret in the body';
+        out.http_status = r.status;
+        // Redact the token itself, keep everything else so `scope` is visible.
+        out.token_response = { ...data };
+        if (out.token_response.access_token) {
+          out.token_response.access_token = '[REDACTED]';
+        }
+        if (out.token_response.refresh_token) {
+          out.token_response.refresh_token = '[REDACTED]';
+        }
+        out.scope_returned = data.scope === undefined ? '(no scope field in the response)' : data.scope;
+        out.scope_includes_refunds = typeof data.scope === 'string'
+          ? data.scope.split(/[\s,]+/).includes('refunds/create')
+          : null;
+        break;
+      }
+    }
+    if (out.token_endpoint) break;
+  }
+
+  const txn = sample.transaction_id || 'tr_THE_ORIGINAL_PAYMENT_ID';
+  const ref = sample.merchant_reference || 'DRW-EXAMPLE';
+  const amt = Number.isFinite(Number(sample.amount)) ? Number(sample.amount) : 100;
+  out.refund_curl = [
+    `curl -X POST '${api}/v3/refunds' \\`,
+    `  -H 'Authorization: Bearer [ACCESS_TOKEN_REMOVED]' \\`,
+    `  -H 'Content-Type: application/json' \\`,
+    `  -H 'Idempotency-Key: refund-${ref}' \\`,
+    `  -d '${JSON.stringify({ transaction_id: txn, amount: amt, merchant_reference: ref })}'`,
+  ].join('\n');
+
+  return out;
+}
