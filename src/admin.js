@@ -734,13 +734,13 @@ function render(){
       'All three used to point at a hash and jump to the top of the page</span></div></div>'+
       '<div class="body">'+
         '<div><label>Instagram URL</label>'+
-          '<input data-set="instagram_url" value="'+esc(S.settings.instagram_url||'')+'" '+
+          '<input data-rs="instagram_url" value="'+esc(S.settings.instagram_url||'')+'" '+
           'placeholder="https://instagram.com/yourpage"></div>'+
         '<div><label>Facebook URL</label>'+
-          '<input data-set="facebook_url" value="'+esc(S.settings.facebook_url||'')+'" '+
+          '<input data-rs="facebook_url" value="'+esc(S.settings.facebook_url||'')+'" '+
           'placeholder="https://facebook.com/yourpage"></div>'+
         '<div><label>Contact email</label>'+
-          '<input data-set="contact_email" value="'+esc(S.settings.contact_email||'')+'" '+
+          '<input data-rs="contact_email" value="'+esc(S.settings.contact_email||'')+'" '+
           'placeholder="hello@drewrys.store"></div>'+
         '<div class="hint">The Contact link opens a mail app addressed here.</div>'+
       '</div></div>';
@@ -750,14 +750,14 @@ function render(){
       '<span>Shown beside the contact form. Leave blank and it uses a published '+
       'review instead, or shows nothing</span></div></div><div class="body">'+
       '<div><label>Quote</label>'+
-        '<input data-set="feature_quote" value="'+esc(S.settings.feature_quote||'')+'" '+
+        '<input data-rs="feature_quote" value="'+esc(S.settings.feature_quote||'')+'" '+
         'placeholder="What they said about the product"></div>'+
       '<div class="two">'+
         '<div><label>Name</label>'+
-          '<input data-set="feature_name" value="'+esc(S.settings.feature_name||'')+'" '+
+          '<input data-rs="feature_name" value="'+esc(S.settings.feature_name||'')+'" '+
           'placeholder="Their name"></div>'+
         '<div><label>Under the name</label>'+
-          '<input data-set="feature_sub" value="'+esc(S.settings.feature_sub||'')+'" '+
+          '<input data-rs="feature_sub" value="'+esc(S.settings.feature_sub||'')+'" '+
           'placeholder="Sea Salt Spray"></div>'+
       '</div>'+
       '<div class="hint">Use something a real customer actually said, with their '+
