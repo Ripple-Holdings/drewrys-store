@@ -433,6 +433,15 @@ export async function createSession(request, env) {
     // to success_url instead. redirect_url, which their docs example shows,
     // is NOT the field for this and has been removed.
     post_success_payment: 'REDIRECT',
+    // merchant_reference is a documented field we were not sending, which is
+    // why every webhook has arrived with merchant_reference:null and matching
+    // has depended entirely on the session:<id> KV mapping. Sending it gives
+    // the webhook a direct route back to the order.
+    merchant_reference: reference,
+    metadata: { order_id: reference },
+    // Documented alongside cancel_url. A declined payment has been going to
+    // cancel_url by default; this is the field for it.
+    failure_url: `${origin}/checkout?failed=1&ref=${reference}`,
     success_url: `${origin}/order?ref=${reference}`,
     cancel_url: `${origin}/checkout?cancelled=1&ref=${reference}`,
   };
@@ -463,6 +472,15 @@ export async function createSession(request, env) {
       console.error('TEYA_EXTRA_SESSION_JSON is not valid JSON, ignored');
     }
   }
+
+  // Log what we actually SEND. Without this, "their screen still appeared"
+  // cannot be told apart from "the deploy did not land", which is exactly the
+  // ambiguity we hit on 11/08.
+  console.log('teya session request:', JSON.stringify({
+    keys: Object.keys(body),
+    post_success_payment: body.post_success_payment ?? '(not sent)',
+    success_url: body.success_url ?? '(not sent)',
+  }));
 
   let res;
   try {
