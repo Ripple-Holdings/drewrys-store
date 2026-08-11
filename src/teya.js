@@ -189,6 +189,14 @@ async function teyaFetch(env, path, init = {}, scope = SCOPE_CHECKOUT) {
       ...(init.headers || {}),
       'Authorization': await authHeader(env, force, scope),
       'Content-Type': 'application/json',
+      // PROVEN 11/08 by the path probe: Teya's edge nginx/WAF returns a bare
+      // 403 HTML page for any request with NO User-Agent — before the request
+      // ever reaches Kong. Workers fetch sends none by default, which is why
+      // /v3/refunds "did not exist" for us while Teya's own WooCommerce plugin
+      // (WordPress always sends a UA) refunds on the same URL. Accept matches
+      // the plugin's shape. Never remove these.
+      'User-Agent': 'drewrys-store/1.0 (+https://drewrys.store)',
+      'Accept': 'application/json',
     },
   });
 
