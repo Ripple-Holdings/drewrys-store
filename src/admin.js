@@ -146,6 +146,56 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
   background:#fff;color:var(--ink);padding:0 18px;border-radius:10px;font-size:14px;
   cursor:pointer;height:44px;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .ghost:hover{background:var(--cotton)}
+/* VAT date range picker */
+.calwrap{position:relative;margin-top:-4px;margin-bottom:14px}
+button.calbtn{width:auto;min-height:0;margin:0;display:inline-flex;align-items:center;gap:10px}
+.calcar{font-size:11px;color:var(--muted)}
+.calpop{position:absolute;z-index:40;top:calc(100% + 8px);left:0;display:flex;
+  background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:0 24px 60px -24px rgba(25,28,33,.45)}
+.calside{display:flex;flex-direction:column;border-right:1px solid var(--line);
+  padding:8px 0;min-width:150px;background:#fff}
+.calside button{width:100%;min-height:0;margin:0;border:0;border-radius:0;background:none;
+  text-align:left;padding:9px 18px;font-size:13.5px;color:var(--ink);cursor:pointer;
+  font-family:'NeueMontreal','Geist',system-ui,sans-serif}
+.calside button:hover{background:var(--cotton)}
+.calside button.on{background:var(--ink);color:var(--cotton)}
+.calmain{padding:14px 16px 10px}
+.calhead{display:flex;align-items:center;gap:8px;padding:0 4px 10px}
+.calmon{font-size:14.5px;font-weight:600;min-width:118px;text-align:center}
+.calgap{flex:1}
+button.calnav{width:28px;height:28px;min-height:0;margin:0;padding:0;border:0;background:none;
+  color:var(--muted);font-size:14px;cursor:pointer;border-radius:7px}
+button.calnav:hover{background:var(--cotton);color:var(--ink)}
+.calgrids{display:flex;gap:26px}
+.calgrid{border-collapse:collapse}
+.calgrid th{font-size:12px;font-weight:500;color:var(--muted);padding:4px 0;
+  text-align:center;text-transform:none;letter-spacing:0}
+.calgrid td{padding:1px;border:0}
+.calgrid td.pad{width:34px}
+.calgrid td button{width:34px;height:32px;min-height:0;margin:0;padding:0;border:0;
+  background:none;border-radius:8px;font-size:13.5px;color:var(--ink);cursor:pointer;
+  font-family:'Geist',system-ui,sans-serif}
+.calgrid td button:hover{background:var(--cotton)}
+.calgrid td button.today{box-shadow:inset 0 0 0 1px var(--peanut)}
+.calgrid td button.mid{background:var(--cotton-2);border-radius:0}
+.calgrid td button.end{background:var(--ink);color:var(--cotton)}
+.calfoot{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);
+  margin-top:10px;padding:12px 4px 4px}
+.calfield{font-size:13px;color:var(--muted);padding-bottom:3px;min-width:96px;
+  border-bottom:2px solid transparent}
+.calfield.act{color:var(--ink);border-bottom-color:var(--ink)}
+.calarrow{color:var(--muted);font-size:13px}
+button.callink{width:auto;min-height:0;margin:0;padding:2px 4px;border:0;background:none;
+  color:var(--peanut-deep);font-size:13px;cursor:pointer}
+button.callink:hover{text-decoration:underline}
+@media(max-width:820px){
+  .calpop{flex-direction:column;left:0;right:0}
+  .calside{flex-direction:row;flex-wrap:wrap;border-right:0;
+    border-bottom:1px solid var(--line);padding:8px}
+  .calside button{width:auto;border-radius:99px;padding:7px 13px}
+  .calgrids{flex-direction:column;gap:14px}
+}
 /* Destructive actions in a red pill, sized so they never compete with the big
    black fulfilment button above them. */
 button.tiny{width:auto;min-height:0;margin:0;background:#9A3B34;
@@ -245,6 +295,7 @@ ${DASH_CSS}
   <button data-tab="delivery" aria-selected="false">Delivery</button>
   <button data-tab="discounts" aria-selected="false">Discounts</button>
   <button data-tab="orders" aria-selected="false">Orders</button>
+  <button data-tab="vat" aria-selected="false">VAT</button>
   <button data-tab="reviews" aria-selected="false">Reviews</button>
   <button data-tab="leads" aria-selected="false">Signups</button>
 </nav>
@@ -262,7 +313,44 @@ var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
 var tab='dashboard', openCard=null, orderView='todo', revView='pending', DIAG=null,
-    REFUND_FOR=null;
+    REFUND_FOR=null, VAT=null, VATR=null, CALOPEN=false, CALM=null, CALPICK=null;
+
+// VAT date picker helpers. Everything is a plain YYYY-MM-DD string in UTC:
+// building from a local Date and slicing toISOString shifts the day behind UTC
+// and would drop a day at the very edge of a VAT period.
+var MONTHS=['January','February','March','April','May','June','July','August',
+  'September','October','November','December'];
+function pad2(n){ return (n<10?'0':'')+n; }
+function ymdOf(d){ return d.getUTCFullYear()+'-'+pad2(d.getUTCMonth()+1)+'-'+pad2(d.getUTCDate()); }
+function todayYmd(){ var d=new Date(); d.setUTCHours(12,0,0,0); return ymdOf(d); }
+function shiftDays(n){ var d=new Date(); d.setUTCHours(12,0,0,0);
+  d.setUTCDate(d.getUTCDate()-n); return ymdOf(d); }
+function monthName(y,m){ return MONTHS[m]+' '+y; }
+function nextY(c){ return c.m===11 ? c.y+1 : c.y; }
+function nextM(c){ return c.m===11 ? 0 : c.m+1; }
+
+function monthGrid(y,m){
+  var lead=new Date(Date.UTC(y,m,1)).getUTCDay();     // 0 = Sunday
+  var days=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+  var sel=CALPICK||{}, from=sel.start||'', to=sel.end||'';
+  var out='<table class="calgrid"><tr>'+
+    ['Su','Mo','Tu','We','Th','Fr','Sa'].map(function(d){return '<th>'+d+'</th>';}).join('')+
+    '</tr><tr>';
+  var col=0, n;
+  for(n=0;n<lead;n++){ out+='<td class="pad"></td>'; col++; }
+  for(n=1;n<=days;n++){
+    var iso=y+'-'+pad2(m+1)+'-'+pad2(n), cls=[];
+    if(iso===todayYmd()) cls.push('today');
+    if(iso===from||iso===to) cls.push('end');
+    else if(from&&to&&iso>from&&iso<to) cls.push('mid');
+    out+='<td><button type="button" data-calday="'+iso+'"'+
+      (cls.length?' class="'+cls.join(' ')+'"':'')+'>'+n+'</button></td>';
+    col++;
+    if(col===7&&n<days){ out+='</tr><tr>'; col=0; }
+  }
+  while(col>0&&col<7){ out+='<td class="pad"></td>'; col++; }
+  return out+'</tr></table>';
+}
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -341,6 +429,26 @@ function render(){
           '<div class="two"><div><label>Price</label><div class="money"><span>£</span>'+
             '<input data-i="'+i+'" data-f="price_pence" inputmode="decimal" value="'+pounds(p.price_pence)+'"></div></div>'+
             '<div><label>Size</label><input data-i="'+i+'" data-f="size" value="'+esc(p.size)+'"></div></div>'+
+          (S.settings.vat_registered
+            ? '<div class="two">'+
+                '<div><label>That price is</label>'+
+                  '<select data-i="'+i+'" data-f="price_mode">'+
+                    '<option value="inc"'+(p.price_mode!=='exc'?' selected':'')+'>Including VAT</option>'+
+                    '<option value="exc"'+(p.price_mode==='exc'?' selected':'')+'>Excluding VAT</option>'+
+                  '</select></div>'+
+                '<div><label>VAT on this product</label>'+
+                  '<div style="display:flex;gap:10px;align-items:center;padding-top:9px">'+
+                    '<input type="checkbox" id="vt-'+i+'" data-i="'+i+'" data-f="vat_applicable"'+
+                      (p.vat_applicable!==false?' checked':'')+
+                      ' style="width:17px;height:17px;flex:0 0 auto;margin:0;accent-color:#2B3037">'+
+                    '<label for="vt-'+i+'" style="display:inline;margin:0;font-size:14px;'+
+                      'color:var(--ink);white-space:normal;cursor:pointer">Charge VAT</label>'+
+                  '</div></div>'+
+              '</div>'+
+              '<div class="hint">'+(p.price_mode==='exc'
+                ? 'Customers will be shown '+money(Math.round((p.price_pence||0)*(100+(Number(S.settings.vat_rate)||0))/100))+', which is this price plus VAT.'
+                : 'Customers are shown '+money(p.price_pence||0)+', with the VAT already inside it.')+'</div>'
+            : '')+
           '<label>Badge <span style="font-weight:400">(blank for none)</span></label>'+
             '<input data-i="'+i+'" data-f="badge" value="'+esc(p.badge)+'" placeholder="e.g. Best seller">'+
           '<label>Short line <span style="font-weight:400">(shown on the card)</span></label>'+
@@ -530,60 +638,14 @@ function render(){
     var OPEN={paid:1,ready:1};
     var pend=S.orders.filter(function(o){return OPEN[o.status];});
     var done=S.orders.filter(function(o){return !OPEN[o.status];});
-    if(orderView==='pay'){
-      h+='<div class="ofilter">'+
-        '<button type="button" data-oview="todo">To fulfil</button>'+
-        '<button type="button" data-oview="done">Done</button>'+
-        '<button type="button" data-oview="pay" class="on">Payments</button></div>';
-      if(!DIAG){
-        h+='<div class="note">Loading...</div>';
-        fetch('/admin/diag',{headers:{'x-admin-key':KEY}})
-          .then(function(r){return r.json();})
-          .then(function(d){ DIAG=d; render(); })
-          .catch(function(){ DIAG={error:'could not load'}; render(); });
-      } else if(DIAG.error){
-        h+='<div class="note">'+esc(DIAG.error)+'</div>';
-      } else {
-        h+='<div class="note">'+esc(DIAG.hint||'')+'</div>';
-        h+='<div class="panel"><h3>Settings the Worker can see</h3><div class="bars">'+
-          Object.keys(DIAG.configured).map(function(k){
-            var v=DIAG.configured[k];
-            return '<div class="bar"><span class="bl">'+esc(k)+'</span><span class="bt"></span>'+
-              '<span class="bv" style="color:'+(v==='set'?'inherit':'#a33')+'">'+v+'</span></div>';
-          }).join('')+'</div></div>';
-
-        h+='<div class="panel"><h3>Orders in the store, including unpaid</h3>';
-        if(!DIAG.orders.length){ h+='<div class="note">None at all.</div>'; }
-        else {
-          h+='<div class="bars">'+DIAG.orders.map(function(o){
-            return '<div class="bar"><span class="bl">'+esc(o.reference)+'</span>'+
-              '<span class="bt" style="background:none">'+esc(o.status)+
-                (o.session_id?'':' <em>no session id</em>')+'</span>'+
-              '<span class="bv">'+(o.status==='pending'
-                ? '<button type="button" class="ghost inline" data-recon="'+esc(o.reference)+'">Check payment</button>'
-                : money(o.total))+'</span></div>';
-          }).join('')+'</div>';
-        }
-        h+='</div>';
-
-        h+='<div class="panel"><h3>Webhook hits</h3>';
-        h+= DIAG.webhook_hits.length
-          ? '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.5">'+
-              esc(JSON.stringify(DIAG.webhook_hits,null,1))+'</pre>'
-          : '<div class="note">Nothing has ever hit a webhook path on this Worker.</div>';
-        h+='</div>';
-      }
-    }
-
-    var list=(orderView==='done')?done:pend;
+        var list=(orderView==='done')?done:pend;
 
     h+='<div class="ofilter">'+
       '<button type="button" data-oview="todo"'+(orderView!=='done'?' class="on"':'')+'>'+
         'To fulfil'+(pend.length?' ('+pend.length+')':'')+'</button>'+
       '<button type="button" data-oview="done"'+(orderView==='done'?' class="on"':'')+'>'+
         'Done'+(done.length?' ('+done.length+')':'')+'</button>'+
-      '<button type="button" data-oview="pay"'+(orderView==='pay'?' class="on"':'')+'>'+
-        'Payments</button></div>';
+      '</div>';
 
     if(!S.orders.length){
       h+='<div class="note">No paid orders yet. They appear here the moment Teya confirms '+
@@ -779,8 +841,140 @@ function render(){
             esc(String(x.at||'').slice(0,10))+'</td></tr>';}).join('')+'</table>';
     }
     h+='</div></div>';
-
   }
+
+  if(tab==='vat'){
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>VAT settings</b><span>Switch this off and no VAT is '+
+      'shown or reported anywhere, including on receipts</span></div></div>'+
+      '<div class="body">'+
+      '<div style="display:flex;gap:10px;align-items:center">'+
+        '<input type="checkbox" id="vreg" data-rs="vat_registered"'+
+          (S.settings.vat_registered?' checked':'')+
+          ' style="width:17px;height:17px;flex:0 0 auto;margin:0;accent-color:#2B3037">'+
+        '<label for="vreg" style="display:inline;margin:0;font-size:14px;color:var(--ink);'+
+          'white-space:normal;cursor:pointer">This business is VAT registered</label></div>'+
+      '<div class="two" style="margin-top:14px">'+
+        '<div><label>VAT registration number</label>'+
+          '<input data-rs="vat_number" value="'+esc(S.settings.vat_number||'')+'" '+
+          'placeholder="GB000000000"></div>'+
+        '<div><label>VAT rate, per cent</label>'+
+          '<input data-rs="vat_rate" type="number" min="0" max="30" step="0.5" value="'+
+          esc(String(S.settings.vat_rate==null?20:S.settings.vat_rate))+'"></div>'+
+      '</div>'+
+      '<div class="hint">The number appears on the terms, returns and privacy pages. '+
+      'The rate is stamped onto each order when it is placed, so changing it here '+
+      'never restates an order already taken.</div>'+
+      '</div></div>';
+
+      var periods=S.vat_periods||[];
+      if(!VATR&&periods.length) VATR={from:periods[0].from,to:periods[0].to,label:periods[0].label};
+
+      // Quarters first, because that is what a VAT return is actually filed on.
+      h+='<div class="ofilter" style="margin-top:-4px">'+periods.map(function(q){
+        return '<button type="button" data-vatq="'+esc(q.id)+'"'+
+          (VATR&&VATR.label===q.label?' class="on"':'')+'>'+esc(q.label)+'</button>';}).join('')+
+        '</div>';
+
+      // Date range picker. One trigger, one popover: preset list on the left,
+      // two months side by side, chosen dates read out underneath.
+      var lbl=(VATR&&VATR.label)||'Choose a period';
+      h+='<div class="calwrap">'+
+        '<button type="button" class="ghost calbtn" data-calopen="1">'+esc(lbl)+
+          '<span class="calcar">&#9662;</span></button>';
+
+      if(CALOPEN){
+        if(!CALM){
+          var seed=(CALPICK&&CALPICK.start)||(VATR&&VATR.from)||todayYmd();
+          CALM={y:+seed.slice(0,4), m:+seed.slice(5,7)-1};
+        }
+        var presets=[['today','Today'],['yesterday','Yesterday'],['7','Last 7 Days'],
+          ['30','Last 30 Days'],['60','Last 60 Days'],['90','Last 90 Days'],
+          ['180','Last 180 Days'],['365','Last 365 Days']];
+
+        h+='<div class="calpop">'+
+          '<div class="calside">'+presets.map(function(x){
+            return '<button type="button" data-vatp="'+x[0]+'"'+
+              (VATR&&VATR.label===x[1]?' class="on"':'')+'>'+x[1]+'</button>';}).join('')+
+          '</div>'+
+          '<div class="calmain">'+
+            '<div class="calhead">'+
+              '<button type="button" class="calnav" data-calnav="-12" aria-label="Previous year">&#124;&lsaquo;</button>'+
+              '<button type="button" class="calnav" data-calnav="-1" aria-label="Previous month">&lsaquo;</button>'+
+              '<span class="calmon">'+monthName(CALM.y,CALM.m)+'</span>'+
+              '<span class="calgap"></span>'+
+              '<span class="calmon">'+monthName(nextY(CALM),nextM(CALM))+'</span>'+
+              '<button type="button" class="calnav" data-calnav="1" aria-label="Next month">&rsaquo;</button>'+
+              '<button type="button" class="calnav" data-calnav="12" aria-label="Next year">&rsaquo;&#124;</button>'+
+            '</div>'+
+            '<div class="calgrids">'+
+              monthGrid(CALM.y,CALM.m)+monthGrid(nextY(CALM),nextM(CALM))+
+            '</div>'+
+            '<div class="calfoot">'+
+              '<span class="calfield'+((CALPICK&&CALPICK.start&&!CALPICK.end)?' act':'')+'">'+
+                (CALPICK&&CALPICK.start?esc(CALPICK.start):'Start date')+'</span>'+
+              '<span class="calarrow">&rarr;</span>'+
+              '<span class="calfield">'+
+                (CALPICK&&CALPICK.end?esc(CALPICK.end):'End date')+'</span>'+
+              '<span class="calgap"></span>'+
+              '<button type="button" class="callink" data-calreset="1">Reset</button>'+
+              '<button type="button" class="callink" data-calclear="1">Clear</button>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      }
+      h+='</div>';
+
+      if(!(S.vat||{}).registered){
+        h+='<div class="note">VAT is switched off in Delivery settings, so nothing is '+
+           'being charged or reported. Turn it on there if the business is registered.</div>';
+      } else if(!VAT){
+        h+='<div class="note">Loading...</div>';
+        if(VATR) fetch('/admin/vat?from='+VATR.from+'&to='+VATR.to,{headers:{'x-admin-key':KEY}})
+          .then(function(r){return r.json();}).then(function(d){ VAT=d; render(); })
+          .catch(function(){ VAT={error:'could not load'}; render(); });
+      } else if(VAT.error){
+        h+='<div class="note">'+esc(VAT.error)+'</div>';
+      } else {
+        h+='<div class="card open"><div class="head" style="cursor:default">'+
+          '<div class="hmeta"><b>VAT due, '+esc((VATR&&VATR.label)||'period')+'</b><span>'+
+          esc(VAT.from)+' to '+esc(VAT.to)+' &middot; registration '+esc(VAT.number||'not set')+
+          ' &middot; '+esc(String(VAT.rate))+' per cent</span></div>'+
+          '<button type="button" class="ghost" data-vatcsv="1">Download CSV</button>'+
+          '</div><div class="body">'+
+          '<table><tr><th>&nbsp;</th><th>Orders</th><th>Gross</th><th>Net</th><th>VAT</th></tr>'+
+          '<tr><td>Sales</td><td>'+VAT.sales.count+'</td><td>'+money(VAT.sales.gross)+
+            '</td><td>'+money(VAT.sales.net)+'</td><td>'+money(VAT.sales.vat)+'</td></tr>'+
+          '<tr><td>Refunds and cancellations</td><td>'+VAT.refunds.count+'</td><td>&minus;'+
+            money(VAT.refunds.gross)+'</td><td>&minus;'+money(VAT.refunds.gross-VAT.refunds.vat)+
+            '</td><td>&minus;'+money(VAT.refunds.vat)+'</td></tr>'+
+          '<tr><td><b>Due</b></td><td></td><td><b>'+money(VAT.due.gross)+'</b></td><td><b>'+
+            money(VAT.due.net)+'</b></td><td><b>'+money(VAT.due.vat)+'</b></td></tr>'+
+          '</table>'+
+          (VAT.exports.count
+            ? '<div class="hint">Includes '+VAT.exports.count+' zero-rated export'+
+              (VAT.exports.count===1?'':'s')+' to Europe worth '+money(VAT.exports.gross)+
+              ', reported as sales with no VAT.</div>'
+            : '')+
+          '<div class="hint">Prices on the site include VAT, so this is the VAT taken OUT '+
+          'of what customers paid, not added on top. Figures are a working total from the '+
+          'orders, not a filed return.</div>'+
+          '</div></div>';
+
+        h+='<div class="card open"><div class="head" style="cursor:default">'+
+          '<div class="hmeta"><b>Every line</b><span>'+VAT.rows.length+' in this period'+
+          '</span></div></div><div class="body">';
+        h+= VAT.rows.length
+          ? '<table><tr><th>Date</th><th>Order</th><th>Where</th><th>Gross</th><th>VAT</th></tr>'+
+            VAT.rows.map(function(r){
+              return '<tr><td>'+esc(r.day)+'</td><td>'+esc(r.reference)+
+                (r.kind!=='sale'?' <span class="hint">'+esc(r.kind)+'</span>':'')+
+                '</td><td>'+esc(r.zone)+(r.zero_rated?' (export)':'')+'</td><td>'+
+                money(r.gross)+'</td><td>'+money(r.vat)+'</td></tr>';}).join('')+'</table>'
+          : '<div class="note">Nothing in this period.</div>';
+        h+='</div></div>';
+      }
+    }
 
   if(tab==='reviews'){
     var revs=S.reviews||[];
@@ -877,7 +1071,8 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
-    '[data-rtog],[data-rgo],[data-csv],'+
+    '[data-rtog],[data-rgo],[data-csv],[data-vatq],[data-vatp],[data-vatcsv],'+
+    '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
 
@@ -892,7 +1087,69 @@ document.addEventListener('click',function(e){
       limit:0,expires:'',stackable:false,min_spend:0});
     render(); refreshBar(); return; }
 
-  if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; if(t.dataset.oview==='pay') DIAG=null; render(); return; }
+  if(t.dataset.oview!==undefined){ orderView=t.dataset.oview;  render(); return; }
+
+  if(t.dataset.calopen!==undefined){ CALOPEN=!CALOPEN; CALM=null; render(); return; }
+  if(t.dataset.calnav!==undefined){
+    var step=parseInt(t.dataset.calnav,10)||0;
+    var tot=CALM.y*12+CALM.m+step;
+    CALM={y:Math.floor(tot/12), m:((tot%12)+12)%12};
+    render(); return;
+  }
+  if(t.dataset.calclear!==undefined){ CALPICK=null; render(); return; }
+  if(t.dataset.calreset!==undefined){
+    var p0=(S.vat_periods||[])[0];
+    CALPICK=null;
+    if(p0){ VATR={from:p0.from,to:p0.to,label:p0.label}; VAT=null; }
+    CALOPEN=false; render(); return;
+  }
+
+  if(t.dataset.calday!==undefined){
+    var d=t.dataset.calday;
+    if(!CALPICK||!CALPICK.start||CALPICK.end){
+      CALPICK={start:d,end:''};                 // first click starts a new range
+    } else {
+      // Second click closes it. Clicking earlier than the first is a slip, not
+      // an instruction, so swap rather than refuse.
+      var a2=CALPICK.start, b2=d;
+      if(b2<a2){ var sw=a2; a2=b2; b2=sw; }
+      CALPICK={start:a2,end:b2};
+      VATR={from:a2,to:b2,label:a2+' to '+b2};
+      VAT=null; CALOPEN=false;
+    }
+    render(); return;
+  }
+
+  if(t.dataset.vatq!==undefined){
+    var q=(S.vat_periods||[]).filter(function(x){return x.id===t.dataset.vatq;})[0];
+    if(q){ VATR={from:q.from,to:q.to,label:q.label}; VAT=null; CALPICK=null; render(); }
+    return;
+  }
+
+  if(t.dataset.vatp!==undefined){
+    var k=t.dataset.vatp, to=todayYmd(), from, label=t.textContent.trim();
+    if(k==='today'){ from=to; }
+    else if(k==='yesterday'){ from=shiftDays(1); to=from; }
+    else { from=shiftDays(parseInt(k,10)-1); }
+    VATR={from:from,to:to,label:label};
+    CALPICK={start:from,end:to};
+    VAT=null; CALOPEN=false; render(); return;
+  }
+
+  if(t.dataset.vatcsv!==undefined){
+    if(!VAT||!VAT.rows) return;
+    var q=String.fromCharCode(34), CRLF=String.fromCharCode(13,10), BOM=String.fromCharCode(65279);
+    var rows=[['date','order','type','where','zero rated','gross','net','vat','rate']]
+      .concat(VAT.rows.map(function(r){
+        return [r.day,r.reference,r.kind,r.zone,r.zero_rated?'yes':'no',
+          (r.gross/100).toFixed(2),(r.net/100).toFixed(2),(r.vat/100).toFixed(2),r.rate];}));
+    var csv=rows.map(function(r){return r.map(function(c){
+      return q+String(c==null?'':c).split(q).join(q+q)+q;}).join(',');}).join(CRLF);
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([BOM+csv],{type:'text/csv;charset=utf-8'}));
+    a.download='drewrys-vat-'+VAT.from+'-to-'+VAT.to+'.csv'; a.click();
+    URL.revokeObjectURL(a.href); return;
+  }
 
   if(t.dataset.csv!==undefined){
     var LD=S.leads||{subscribers:[],enquiries:[]};
@@ -1121,9 +1378,10 @@ document.addEventListener('input',function(e){
   var t=e.target;
   if(t.dataset.i!==undefined&&t.dataset.f){
     var p=draft.catalogue.products[+t.dataset.i], f=t.dataset.f;
-    if(f==='active') p[f]=t.checked;
+    if(f==='active'||f==='vat_applicable') p[f]=t.checked;
     else if(f==='price_pence') p[f]=toPence(t.value);
     else p[f]=t.value;
+    if(f==='price_mode'||f==='vat_applicable') render();
     if(f==='name'||f==='price_pence'){
       var head=t.closest('.card').querySelector('.hmeta');
       head.querySelector('b').childNodes[0].nodeValue=p.name||'Untitled';
