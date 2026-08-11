@@ -159,6 +159,11 @@ button.calbtn{width:auto;min-height:0;margin:0;display:inline-flex;align-items:c
   text-align:left;padding:9px 18px;font-size:13.5px;color:var(--ink);cursor:pointer;
   font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .calside button:hover{background:var(--cotton)}
+button.calapply{width:auto;min-height:0;margin:0;padding:8px 18px;border:0;border-radius:99px;
+  background:var(--ink);color:var(--cotton);font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'NeueMontreal','Geist',system-ui,sans-serif}
+button.calapply:hover{background:#000}
+button.calapply:disabled{opacity:.35;cursor:default}
 .calside button.on{background:var(--ink);color:var(--cotton)}
 .calmain{padding:14px 16px 10px}
 .calhead{display:flex;align-items:center;gap:8px;padding:0 4px 10px}
@@ -870,7 +875,8 @@ function render(){
       var periods=S.vat_periods||[];
       if(!VATR&&periods.length) VATR={from:periods[0].from,to:periods[0].to,label:periods[0].label};
 
-      // Quarters first, because that is what a VAT return is actually filed on.
+      // Quarters are buttons in their own right. They were making the popover
+      // twice as tall for something that is one click either way.
       h+='<div class="ofilter" style="margin-top:-4px">'+periods.map(function(q){
         return '<button type="button" data-vatq="'+esc(q.id)+'"'+
           (VATR&&VATR.label===q.label?' class="on"':'')+'>'+esc(q.label)+'</button>';}).join('')+
@@ -919,6 +925,8 @@ function render(){
               '<span class="calgap"></span>'+
               '<button type="button" class="callink" data-calreset="1">Reset</button>'+
               '<button type="button" class="callink" data-calclear="1">Clear</button>'+
+              '<button type="button" class="calapply" data-calapply="1"'+
+                ((CALPICK&&CALPICK.start&&CALPICK.end)?'':' disabled')+'>Apply</button>'+
             '</div>'+
           '</div>'+
         '</div>';
@@ -1073,6 +1081,7 @@ document.addEventListener('click',function(e){
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
     '[data-rtog],[data-rgo],[data-csv],[data-vatq],[data-vatp],[data-vatcsv],'+
     '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
+    '[data-calapply],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
 
@@ -1109,20 +1118,26 @@ document.addEventListener('click',function(e){
     if(!CALPICK||!CALPICK.start||CALPICK.end){
       CALPICK={start:d,end:''};                 // first click starts a new range
     } else {
-      // Second click closes it. Clicking earlier than the first is a slip, not
-      // an instruction, so swap rather than refuse.
+      // Second click closes the range but does NOT apply it. Clicking earlier
+      // than the first is a slip, not an instruction, so swap rather than
+      // refuse. Apply is what commits.
       var a2=CALPICK.start, b2=d;
       if(b2<a2){ var sw=a2; a2=b2; b2=sw; }
       CALPICK={start:a2,end:b2};
-      VATR={from:a2,to:b2,label:a2+' to '+b2};
-      VAT=null; CALOPEN=false;
     }
     render(); return;
   }
 
+  if(t.dataset.calapply!==undefined){
+    if(!CALPICK||!CALPICK.start||!CALPICK.end) return;
+    VATR={from:CALPICK.start,to:CALPICK.end,label:CALPICK.start+' to '+CALPICK.end};
+    VAT=null; CALOPEN=false; render(); return;
+  }
+
   if(t.dataset.vatq!==undefined){
     var q=(S.vat_periods||[]).filter(function(x){return x.id===t.dataset.vatq;})[0];
-    if(q){ VATR={from:q.from,to:q.to,label:q.label}; VAT=null; CALPICK=null; render(); }
+    if(q){ VATR={from:q.from,to:q.to,label:q.label}; VAT=null;
+           CALPICK={start:q.from,end:q.to}; CALOPEN=false; render(); }
     return;
   }
 
