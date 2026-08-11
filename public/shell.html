@@ -100,10 +100,21 @@ header.nav .cur{width:10px;height:2px}
 
 /* TICKER */
 .ticker{background:var(--slate);color:var(--cream);overflow:hidden;border-block:1px solid var(--slate-2)}
-.ticker-track{display:flex;gap:2.4rem;padding:13px 0;white-space:nowrap;width:max-content;animation:scroll 26s linear infinite}
-.ticker-track span{font-family:"NeueMontreal";font-weight:500;font-size:1rem;letter-spacing:.03em;text-transform:uppercase;display:inline-flex;align-items:center;gap:2.4rem}
+/* The gap between items is a MARGIN, not flex gap. Flex gap only sits BETWEEN
+   children, so the join between the last item of one copy and the first of the
+   next is short by one gap and the loop jumps. A margin makes every item the
+   same self-contained width, so a copy is exactly n x item. */
+.ticker-track{display:flex;padding:13px 0;white-space:nowrap;width:max-content;
+  animation:scroll var(--tick-dur,26s) linear infinite}
+.ticker-track .tk{display:inline-flex;align-items:center;gap:2.4rem;margin-right:2.4rem;
+  font-family:"NeueMontreal";font-weight:500;font-size:1rem;letter-spacing:.03em;
+  text-transform:uppercase}
 .ticker-track .d{color:var(--peanut)}
-@keyframes scroll{to{transform:translateX(-50%)}}
+/* Shift by ONE COPY, measured in px, not by 50 per cent. Fifty per cent is only
+   one copy when there are exactly two of them, and two copies of eight items is
+   narrower than a wide screen, which is what left the gap after Elijah. */
+@keyframes scroll{to{transform:translateX(calc(var(--tick-shift,50%) * -1))}}
+@media(prefers-reduced-motion:reduce){.ticker-track{animation:none}}
 
 /* SECTIONS */
 section{padding-block:clamp(56px,8vw,120px)}
@@ -1067,8 +1078,32 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 
 (function(){
   const items=['Matte Clay','Sea Salt Spray','Fibre','Paste','Crème','Form','Rejuvenating Shampoo','Elijah'];
-  let html='';for(let r=0;r<2;r++){for(const i of items){html+='<span>'+i+' <span class="d">/</span></span>';}}
-  document.getElementById('ticker').innerHTML=html;
+  const track=document.getElementById('ticker');
+  if(!track) return;
+  const one=items.map(function(i){
+    return '<span class="tk">'+i+' <span class="d">/</span></span>';}).join('');
+
+  function build(){
+    // Lay ONE copy down, measure it, then repeat until the track is at least
+    // twice the viewport. That guarantees there is always a full screen of
+    // items to the right of the one scrolling off, whatever the screen width.
+    track.style.animation='none';
+    track.innerHTML=one;
+    const copyW=track.scrollWidth;
+    if(!copyW) return;
+    const need=Math.max(2, Math.ceil((window.innerWidth*2)/copyW));
+    track.innerHTML=one.repeat(need);
+    track.style.setProperty('--tick-shift', copyW+'px');
+    // Keep the speed constant rather than the duration: a wider copy has to
+    // travel further in proportion, or the strip races on a big screen.
+    track.style.setProperty('--tick-dur', (copyW/55).toFixed(2)+'s');
+    void track.offsetWidth;                    // restart the animation cleanly
+    track.style.animation='';
+  }
+
+  build();
+  let t; addEventListener('resize',function(){ clearTimeout(t); t=setTimeout(build,180); });
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(build);
 })();
 
 const __D__=(window.__DREWRYS__||{products:[],stock:{}});
