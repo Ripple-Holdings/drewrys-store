@@ -44,7 +44,7 @@ const f = (key) => {
     : String(v).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 };
 
-const updated = 'July 2026';
+const updated = 'August 2026';
 
 function page(title, intro, body) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
@@ -325,10 +325,12 @@ enough &ndash; but it is here if you prefer it.</p>
 export const PRIVACY = page('Privacy Policy',
   'What we collect when you order, why, and what we do not do.',
   `<div class="box">
-  <p><strong>The short version.</strong> We collect what we need to send you
-  your order and nothing else. We never see your card details. This site sets
-  no cookies and runs no tracking or advertising. We do not sell your data to
-  anyone.</p>
+  <p><strong>The short version.</strong> We collect the details you give us at
+  checkout to send you your order, and anything you choose to give us after
+  that &ndash; a newsletter signup, a message, a review &ndash; is listed
+  below. We never see your card details. This site sets no cookies and shows
+  no advertising. Our own visitor counting runs on our server, cannot identify
+  you, and is shared with nobody. We do not sell your data to anyone.</p>
 </div>
 
 ${who}
