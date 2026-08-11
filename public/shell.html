@@ -734,6 +734,70 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 .md-sub{font-size:.78rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
   color:var(--peanut-deep)}
 .md-desc{font-weight:400;color:rgba(25,28,33,.82)}
+
+/* ── Contact modal and the newsletter confirmation ───────────────────────── */
+.mscrim{position:fixed;inset:0;background:rgba(25,28,33,.55);-webkit-backdrop-filter:blur(3px);
+  backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:120}
+.mscrim.open{opacity:1;pointer-events:auto}
+.modal{position:fixed;inset:0;display:grid;place-items:center;padding:20px;z-index:121;
+  opacity:0;pointer-events:none;transition:opacity .25s ease}
+.modal.open{opacity:1;pointer-events:auto}
+.mbox{width:min(980px,100%);max-height:92dvh;overflow:auto;background:var(--cotton);
+  border-radius:20px;display:grid;grid-template-columns:1fr 1fr;
+  box-shadow:0 30px 80px -30px rgba(25,28,33,.6);transform:translateY(14px) scale(.985);
+  transition:transform .28s cubic-bezier(.2,.7,.3,1)}
+.modal.open .mbox{transform:none}
+.mbox--sm{grid-template-columns:1fr;width:min(440px,100%);text-align:center}
+.mside{position:relative;background:var(--slate);overflow:hidden;border-radius:20px 0 0 20px}
+.mside img{width:100%;height:100%;object-fit:cover;display:block}
+.mside::after{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(25,28,33,.30) 0%,rgba(25,28,33,.62) 100%)}
+/* Glassmorphism: translucent over the photo, blurred, with a light top edge so
+   it reads as a pane of glass rather than a flat panel. */
+.mquote{position:absolute;top:50%;left:26px;right:26px;transform:translateY(-50%);z-index:2;
+  background:rgba(255,255,255,.13);-webkit-backdrop-filter:blur(16px) saturate(140%);
+  backdrop-filter:blur(16px) saturate(140%);border:1px solid rgba(255,255,255,.22);
+  border-radius:20px;padding:26px 24px;
+  box-shadow:0 18px 50px -18px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.28)}
+.mq-stars{display:flex;gap:5px;margin-bottom:15px}
+.mq-stars svg{width:17px;height:17px;fill:var(--peanut)}
+.mquote p{font-size:1.06rem;line-height:1.5;color:#fff;margin:0 0 18px;
+  text-shadow:0 1px 12px rgba(0,0,0,.35)}
+.mquote .mq-who{display:flex;align-items:center;gap:11px}
+.mquote .mq-av{width:38px;height:38px;border-radius:50%;
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);
+  display:grid;place-items:center;font-weight:700;font-size:.92rem;color:#fff;flex:0 0 auto}
+.mquote .mq-n{font-weight:650;font-size:.93rem;line-height:1.25;color:#fff}
+.mquote .mq-r{font-size:.83rem;color:rgba(255,255,255,.72);line-height:1.25}
+.mmain{padding:clamp(26px,3.4vw,38px)}
+.mmain .mlogo{width:44px;height:auto;display:block;margin-bottom:18px}
+.mmain h2{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
+  font-size:clamp(1.6rem,3vw,2.05rem);letter-spacing:-.02em;line-height:1.05;margin:0}
+.mmain .msub{margin-top:10px;font-size:.98rem;line-height:1.55;color:rgba(25,28,33,.66)}
+.mmain .msub a{color:var(--peanut-deep)}
+.mfield{margin-top:16px;text-align:left}
+.mfield label{display:block;font-size:.82rem;font-weight:600;color:var(--ink);margin-bottom:6px}
+.mfield input,.mfield textarea{width:100%;background:#fff;border:1px solid rgba(25,28,33,.16);
+  border-radius:11px;padding:12px 14px;font-family:inherit;font-size:.98rem;color:var(--ink)}
+.mfield textarea{min-height:118px;resize:vertical}
+.mfield input:focus,.mfield textarea:focus{outline:none;border-color:var(--peanut)}
+.msend{width:100%;margin-top:20px;background:var(--slate);color:var(--cotton);border:0;
+  border-radius:11px;padding:15px;font-family:"NeueMontreal","Geist",system-ui,sans-serif;
+  font-weight:600;font-size:1rem;cursor:pointer}
+.msend:hover{background:var(--ink)}
+.msend:disabled{opacity:.6;cursor:default}
+.mnote{margin-top:12px;font-size:.9rem;line-height:1.5;min-height:1.2em;text-align:left}
+.mclose{position:absolute;top:14px;right:16px;width:34px;height:34px;border-radius:50%;
+  border:0;background:rgba(243,237,225,.9);color:var(--ink);font-size:1.15rem;line-height:1;
+  cursor:pointer;z-index:2}
+.mtick{width:58px;height:58px;border-radius:50%;background:var(--slate);display:grid;
+  place-items:center;margin:0 auto 18px}
+.mtick svg{width:26px;height:26px;stroke:var(--cotton);stroke-width:2.6;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+@media(max-width:820px){
+  .mbox{grid-template-columns:1fr}
+  .mside{display:none}
+}
 </style></style>
 </head>
 <body>
@@ -894,8 +958,10 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         </div>
       </div>
       <div class="field"><label for="wsMsg">Anything else?</label><textarea id="wsMsg" placeholder="Location, size of order, questions"></textarea></div>
+      <input type="text" id="wsHp" tabindex="-1" autocomplete="off" aria-hidden="true"
+        style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
       <button class="btn ws-submit" id="wsSubmit">Request trade pricing</button>
-      <p class="formnote" style="color:rgba(243,237,225,.5)">We'll come back to you within two working days.</p>
+      <p class="formnote" id="wsNote" style="color:rgba(243,237,225,.5)">We'll come back to you within two working days.</p>
     </div>
   </div>
 </section>
@@ -911,9 +977,12 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
           <div class="fl-pill">
             <form id="flForm" class="fl-form">
               <input type="email" name="newsletter_email" id="em" placeholder="Your Email * " autocomplete="email" aria-label="Email address">
+              <input type="text" name="hp" tabindex="-1" autocomplete="off" aria-hidden="true"
+                style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
               <button type="submit" id="notify" aria-label="Subscribe"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" class="fl-arrow" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="#191C21" fill-rule="evenodd" clip-rule="evenodd"></path></svg></button>
             </form>
           </div>
+          <p class="fl-sub" id="flNote" hidden style="margin-top:10px;font-size:.92rem"></p>
         </div>
       </div>
       <div class="fl-links">
@@ -923,12 +992,12 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
           <li><a href="#shop">Shop</a></li>
           <li><a href="#story">Story</a></li>
           <li><a href="#wholesale">Wholesale</a></li>
-          <li><a href="#">Contact</a></li>
+          <li><a href="#" id="flContact">Contact</a></li>
         </ul>
         <ul>
           <li class="fl-lh">SOCIAL</li>
-          <li><a href="#" target="_blank" rel="noreferrer noopener" class="u">Instagram</a></li>
-          <li><a href="#" target="_blank" rel="noreferrer noopener" class="u">Facebook</a></li>
+          <li id="flIgLi" hidden><a href="#" id="flIg" target="_blank" rel="noreferrer noopener" class="u">Instagram</a></li>
+          <li id="flFbLi" hidden><a href="#" id="flFb" target="_blank" rel="noreferrer noopener" class="u">Facebook</a></li>
         </ul>
       </div>
     </div>
@@ -1347,18 +1416,173 @@ renderCart();
   });
   window.__pairOpen=pairOpen;
 
-document.getElementById('wsSubmit').addEventListener('click',function(){
-  const em=document.getElementById('wsEmail');
-  if(!em.value.includes('@')){em.focus();return;}
-  this.textContent='Request sent'; this.style.background='var(--cream)';
+document.getElementById('wsSubmit').addEventListener('click',async function(){
+  // This button used to just relabel ITSELF "Request sent" and send nothing,
+  // so every trade enquiry since launch was lost while the shop looked keen.
+  const btn=this;
+  const get=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
+  const note=document.getElementById('wsNote');
+  const say=(m,bad)=>{ if(!note) return; note.textContent=m;
+    note.style.color=bad?'#e8a5a0':'rgba(243,237,225,.6)'; };
+  const email=get('wsEmail');
+  if(!get('wsBiz')){ say('Tell us your business name.',true);
+    document.getElementById('wsBiz').focus(); return; }
+  if(!get('wsName')){ say('Tell us your name.',true);
+    document.getElementById('wsName').focus(); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){
+    say('That does not look like an email address.',true);
+    document.getElementById('wsEmail').focus(); return; }
+  const was=btn.textContent; btn.disabled=true; btn.textContent='Sending...';
+  try{
+    const r=await fetch('/api/enquiry',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({business:get('wsBiz'),name:get('wsName'),email:email,
+        type:get('wsType'),message:get('wsMsg'),hp:get('wsHp')})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.error){ say(d.error||'That did not send. Try again in a moment.',true);
+      btn.disabled=false; btn.textContent=was; return; }
+    btn.textContent='Request sent'; btn.style.background='var(--cream)';
+    say('Thanks, we will come back to you within two working days.');
+  }catch(err){ say('That did not send. Try again in a moment.',true);
+    btn.disabled=false; btn.textContent=was; }
 });
+/* ── Modals ──────────────────────────────────────────────────────────────
+   openModal/closeModal handle the scrim, body scroll lock, Escape and focus.
+   The quote on the contact panel is filled from a PUBLISHED review if one
+   exists. Nothing is invented: with no reviews the card simply stays hidden. */
+function initModals(){
+  var scrim=document.getElementById('mScrim');
+  if(!scrim) return;
+  var lastFocus=null;
+  function openModal(id){
+    var m=document.getElementById(id); if(!m) return;
+    lastFocus=document.activeElement;
+    m.hidden=false; scrim.classList.add('open');
+    requestAnimationFrame(function(){ m.classList.add('open'); });
+    document.body.style.overflow='hidden';
+    var f=m.querySelector('input,textarea,button'); if(f) f.focus();
+  }
+  function closeModal(m){
+    if(!m) m=document.querySelector('.modal.open');
+    if(!m) return;
+    m.classList.remove('open'); scrim.classList.remove('open');
+    document.body.style.overflow='';
+    setTimeout(function(){ m.hidden=true; },260);
+    if(lastFocus&&lastFocus.focus) lastFocus.focus();
+  }
+  window.__openModal=openModal; window.__closeModal=closeModal;
+
+  scrim.addEventListener('click',function(){ closeModal(); });
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeModal(); });
+  document.addEventListener('click',function(e){
+    var t=e.target.closest('[data-mclose]'); if(!t) return;
+    closeModal(t.closest('.modal'));
+  });
+
+  var D=window.__DREWRYS__||{}, L=D.links||{};
+  var mail=document.getElementById('mcEmail');
+  if(mail){ mail.textContent=L.contact||'hello@drewrys.store';
+            mail.href='mailto:'+(L.contact||'hello@drewrys.store'); }
+
+  // A review chosen in the admin wins; otherwise a real published one; otherwise
+  // the card stays hidden. Nothing here is invented.
+  var F=D.featured_review||{};
+  var revs=(D.reviews||[]).filter(function(r){ return (r.body||r.text)&&(r.rating||5)>=4; });
+  var chosen=null;
+  if(F.quote&&F.name){ chosen={body:F.quote,name:F.name,product_name:F.sub}; }
+  else if(revs.length){ chosen=revs[0]; }
+  if(chosen){
+    var r=chosen;
+    var txt=String(r.body||r.text||'').trim();
+    var who=String(r.name||'').trim();
+    document.getElementById('mQuoteText').textContent='\u201c'+txt+'\u201d';
+    document.getElementById('mQuoteName').textContent=who||'Verified customer';
+    document.getElementById('mQuoteRole').textContent=r.product_name||'Drewrys customer';
+    document.getElementById('mQuoteAv').textContent=(who||'D').trim().charAt(0).toUpperCase();
+    document.getElementById('mQuote').hidden=false;
+  }
+
+  var f=document.getElementById('mcForm');
+  if(f) f.addEventListener('submit',async function(e){
+    e.preventDefault();
+    var name=document.getElementById('mcName').value.trim();
+    var email=document.getElementById('mcMail').value.trim();
+    var msg=document.getElementById('mcMsg').value.trim();
+    var hp=document.getElementById('mcHp').value;
+    var note=document.getElementById('mcNote'), btn=document.getElementById('mcSend');
+    var say=function(m,bad){ note.textContent=m;
+      note.style.color=bad?'#a3423a':'rgba(25,28,33,.62)'; };
+    if(!name){ say('Tell us your name.',true); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){
+      say('That does not look like an email address.',true); return; }
+    if(!msg){ say('Tell us how we can help.',true); return; }
+    btn.disabled=true; var was=btn.textContent; btn.textContent='Sending...';
+    try{
+      var r2=await fetch('/api/contact',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:name,email:email,message:msg,hp:hp})});
+      var d=await r2.json().catch(function(){return {};});
+      if(!r2.ok||d.error){ say(d.error||'That did not send. Try again in a moment.',true);
+        btn.disabled=false; btn.textContent=was; return; }
+      f.reset(); btn.textContent='Sent';
+      say('Thanks. We will come back to you within two working days.');
+    }catch(err){ say('That did not send. Try again in a moment.',true);
+      btn.disabled=false; btn.textContent=was; }
+  });
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',initModals);
+} else { initModals(); }
+
+/* Footer links. All three were href="#", so Contact, Instagram and Facebook
+   every one of them jumped to the top of the page. They come from settings now,
+   and anything unset is HIDDEN rather than left dead. */
+function initFooterLinks(){
+  const L=(window.__DREWRYS__&&window.__DREWRYS__.links)||{};
+  const c=document.getElementById('flContact');
+  if(c){ c.href='#'; c.addEventListener('click',function(e){
+    e.preventDefault(); if(window.__openModal) window.__openModal('mContact'); }); }
+  [['flIg','flIgLi',L.instagram],['flFb','flFbLi',L.facebook]].forEach(function(t){
+    const a=document.getElementById(t[0]), li=document.getElementById(t[1]);
+    if(!a||!li) return;
+    if(t[2]){ a.href=t[2]; li.hidden=false; }
+  });
+  // The SOCIAL heading is pointless with nothing under it.
+  const ig=document.getElementById('flIgLi'), fb=document.getElementById('flFbLi');
+  if(ig&&fb&&ig.hidden&&fb.hidden){ const h=ig.previousElementSibling;
+    if(h&&h.classList.contains('fl-lh')) h.hidden=true; }
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',initFooterLinks);
+} else { initFooterLinks(); }
+
 (function(){
   const form=document.getElementById('flForm'), toast=document.getElementById('flToast');
-  if(form){ form.addEventListener('submit',e=>{ e.preventDefault();
+  if(form){ form.addEventListener('submit',async e=>{ e.preventDefault();
     const em=form.querySelector('input[name=newsletter_email]');
-    if(!em.value.includes('@')){ em.focus(); return; }
-    form.reset(); toast.hidden=false;
-    setTimeout(()=>{ toast.hidden=true; },2000);          // component: popup auto-closes after 2s
+    const hp=form.querySelector('input[name=hp]');
+    const btn=form.querySelector('button[type=submit]');
+    const note=document.getElementById('flNote');
+    const say=(msg,bad)=>{ if(!note) return; note.textContent=msg;
+      note.style.color=bad?'#e8a5a0':'rgba(243,237,225,.72)'; note.hidden=false; };
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em.value.trim())){
+      say('That does not look like an email address.',true); em.focus(); return; }
+    btn.disabled=true;
+    try{
+      // It used to clear the box and show a toast without sending anything, so
+      // every signup since launch was lost and the customer was told it worked.
+      const r=await fetch('/api/subscribe',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({email:em.value.trim(), hp:hp?hp.value:'', source:'footer'})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||d.error){ say(d.error||'That did not send. Try again in a moment.',true);
+        btn.disabled=false; return; }
+      form.reset();
+      if(d.already){ say('You are already on the list.'); }
+      else if(window.__openModal){ say(''); window.__openModal('mSignup'); }
+      else { say('Thanks, you are on the list.'); }
+    }catch(err){ say('That did not send. Try again in a moment.',true); }
+    btn.disabled=false;
   }); }
   // animated logo: spring rise per letter (translateY 200 -> 0, delay i*0.03), on scroll into view
   const svg=document.getElementById('flBrandBand');
@@ -2028,5 +2252,58 @@ let r=null, mounted=true;
    next enters, staggered per item */
 
 </script>
+
+<!-- Contact, opened from the footer link. The review on the left comes from a
+     PUBLISHED review if there is one; there is no invented testimonial. -->
+<div class="mscrim" id="mScrim" aria-hidden="true"></div>
+
+<div class="modal" id="mContact" role="dialog" aria-modal="true" aria-labelledby="mcTitle" hidden>
+  <div class="mbox">
+    <div class="mside">
+      <img src="/img/hero-1.jpg" alt="">
+      <div class="mquote" id="mQuote" hidden>
+        <div class="mq-stars" id="mQuoteStars" aria-label="Five out of five"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.6l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.2l-4.94 2.6.94-5.5-4-3.9 5.53-.8z"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.6l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.2l-4.94 2.6.94-5.5-4-3.9 5.53-.8z"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.6l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.2l-4.94 2.6.94-5.5-4-3.9 5.53-.8z"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.6l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.2l-4.94 2.6.94-5.5-4-3.9 5.53-.8z"/></svg><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1.6l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.2l-4.94 2.6.94-5.5-4-3.9 5.53-.8z"/></svg></div>
+        <p id="mQuoteText"></p>
+        <div class="mq-who">
+          <span class="mq-av" id="mQuoteAv"></span>
+          <span><span class="mq-n" id="mQuoteName"></span><br>
+                <span class="mq-r" id="mQuoteRole"></span></span>
+        </div>
+      </div>
+    </div>
+    <div class="mmain" style="position:relative">
+      <button class="mclose" data-mclose aria-label="Close">&times;</button>
+      <img class="mlogo" src="/img/logo-d.png" alt="Drewrys">
+      <h2 id="mcTitle">Contact us</h2>
+      <p class="msub">We&rsquo;re here to help with any questions. Email us at
+        <a id="mcEmail" href="#"></a>.</p>
+      <form id="mcForm" novalidate>
+        <div class="mfield"><label for="mcName">Name</label>
+          <input id="mcName" type="text" placeholder="Your name" autocomplete="name"></div>
+        <div class="mfield"><label for="mcMail">Email</label>
+          <input id="mcMail" type="email" placeholder="you@email.com" autocomplete="email"></div>
+        <div class="mfield"><label for="mcMsg">Message</label>
+          <textarea id="mcMsg" placeholder="How can we help you?"></textarea></div>
+        <input type="text" id="mcHp" tabindex="-1" autocomplete="off" aria-hidden="true"
+          style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+        <button type="submit" class="msend" id="mcSend">Send</button>
+        <p class="mnote" id="mcNote"></p>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="mSignup" role="dialog" aria-modal="true" aria-labelledby="msTitle" hidden>
+  <div class="mbox mbox--sm">
+    <div class="mmain" style="position:relative">
+      <button class="mclose" data-mclose aria-label="Close">&times;</button>
+      <div class="mtick"><svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6.5"/></svg></div>
+      <h2 id="msTitle">You&rsquo;re in.</h2>
+      <p class="msub" style="text-align:center">Thanks for signing up. You will hear from us
+        when something new lands, and you will get first look at the limited runs.</p>
+      <button type="button" class="msend" data-mclose>Close</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
