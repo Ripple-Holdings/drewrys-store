@@ -190,10 +190,14 @@ function salesChart(){
     (vals.length===1?'<circle cx="'+x(0,1)+'" cy="'+y(vals[0])+'" r="6" fill="#6f8a5f"/>':'')+
     '</svg>';
 
+  // Each label has to occupy the same slice as its data point, or the shown
+  // ones shrink-wrap and butt together - which is what produced
+  // "00:0003:0006:00" across the axis.
   var xlab=pts.map(function(p,i){
     var show=pts.length<=12||i%Math.ceil(pts.length/8)===0;
     var t=s.view==='hour'?p.key+':00':(s.view==='week'?dLabel(p.key):dLabel(p.key));
-    return '<span>'+(show?t:'')+'</span>';}).join('');
+    return '<span style="flex:1;min-width:0;text-align:center;white-space:nowrap;'+
+      'overflow:visible">'+(show?t:'')+'</span>';}).join('');
 
   var strips=pts.map(function(p,i){
     return '<div data-si="'+i+'" style="flex:1"></div>';}).join('');
@@ -206,7 +210,8 @@ function salesChart(){
         '<div id="salesStrips" style="position:absolute;inset:0;display:flex">'+strips+'</div>'+
       '</div>'+
     '</div>'+
-    '<div style="display:flex;gap:0;margin-left:48px">'+xlab+'</div>'+
+    '<div style="display:flex;gap:0;margin-left:48px;font-size:11px;'+
+      'color:#a39c8e;padding-top:6px">'+xlab+'</div>'+
     '<div class="lg"><span><i></i>This period</span>'+
       (prev.length?'<span><i class="d"></i>Previous period</span>':'')+'</div>'+
     '<div id="salesTip"></div></div>';

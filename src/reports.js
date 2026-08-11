@@ -96,6 +96,9 @@ const DC_ORG = /amazon|google llc|google cloud|microsoft|azure|digitalocean|hetz
  */
 function humanRequest(request) {
   const cf = request.cf || {};
+  // Cloudflare's own verdict, free on every plan and authoritative for the
+  // crawlers it recognises. Was not being used at all.
+  if (cf.verifiedBotCategory) return false;
   if (cf.asn && DC_ASN.has(Number(cf.asn))) return false;
   if (cf.asOrganization && DC_ORG.test(String(cf.asOrganization))) return false;
   if (!request.headers.get('accept-language')) return false;
@@ -247,7 +250,12 @@ export async function mirrorOrder(env, order) {
     const ts = Date.parse(order.settled || order.created || '') || Date.now();
     const day = dayKey(ts);
     const items = order.items || [];
-    const subtotal = items.reduce((s, i) => s + (i.line ?? (i.unit_price || 0) * (i.quantity || 0)), 0);
+    // The basket item field is unit_amount (teya.js priceBasket). This read
+    // unit_price, which does not exist on the order, so every line came out 0
+    // and best sellers showed 7 units against GBP 0.00.
+    const lineOf = (i) => Math.round(
+      i.line ?? ((i.unit_amount ?? i.unit_price ?? 0) * (i.quantity || 0)));
+    const subtotal = items.reduce((s, i) => s + lineOf(i), 0);
 
     await env.DB.prepare(
       `INSERT INTO ord (reference, ts, day, hour, total, subtotal, delivery,
@@ -272,7 +280,7 @@ export async function mirrorOrder(env, order) {
          VALUES (?, ?, ?, ?, ?)`)
         .bind(order.reference, i.sku || '', i.name || '',
               Math.max(0, i.quantity || 0),
-              Math.round(i.line ?? (i.unit_price || 0) * (i.quantity || 0)))
+              lineOf(i))
         .run();
     }
     await noteFirstDay(env, day);
