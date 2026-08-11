@@ -42,6 +42,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 
 const gbp = (p) => '&pound;' + (Number(p || 0) / 100).toFixed(2);
 
+import { vatForOrder } from './vat.js';
+
 const INK = '#191C21';
 const COTTON = '#F3EDE1';
 const PEANUT = '#9A6C3E';
@@ -129,7 +131,7 @@ function itemBlock(origin, item) {
     </tr></table></td></tr>`;
 }
 
-function totalsBlock(order) {
+function totalsBlock(order, settings) {
   const line = (l, v, bold) => `<tr>
     <td style="font-family:${SANS};font-size:${bold ? '16px' : '14px'};
       color:${bold ? INK : MUTED};font-weight:${bold ? 700 : 400};padding:${bold ? '11px 0 0' : '6px 0 0'}">${l}</td>
@@ -149,6 +151,13 @@ function totalsBlock(order) {
         : 'Delivery' + (order.method ? ', ' + esc(order.method.name) : ''),
         order.shipping ? gbp(order.shipping) : 'Free')}
       ${line('Total', gbp(order.total), true)}
+      ${(() => {
+        const v = vatForOrder(order, settings || {});
+        if (!v.applicable) return '';
+        return v.zeroRated
+          ? line('Zero-rated export, no VAT', '')
+          : line(`Includes VAT at ${v.rate}%`, gbp(v.vat));
+      })()}
     </table></td></tr>`;
 }
 
@@ -223,7 +232,7 @@ export function confirmationEmails(order, opts = {}) {
               'Order date', esc(niceDate(order.settled || order.created)))}
     ${collect && collectLines.length ? panel('Collecting from', collectLines) : ''}
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
-    ${totalsBlock(order)}
+    ${totalsBlock(order, opts.settings)}
     ${collect
       ? factRow('Your details', [c.name, c.email].filter(Boolean).map(esc).join('<br>'), '', '')
       : addressBlock(order, opts.collectAddress)}
@@ -242,7 +251,7 @@ export function confirmationEmails(order, opts = {}) {
               collect ? 'In store' : esc((order.method || {}).name || 'Delivery'),
               'Customer', [c.name, c.email, c.phone].filter(Boolean).map(esc).join('<br>'))}
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
-    ${totalsBlock(order)}
+    ${totalsBlock(order, opts.settings)}
     ${collect ? '' : factRow('Ship to',
         [c.line1, c.line2, c.city, c.postcode, c.country].filter(Boolean).map(esc).join('<br>'), '', '')}
   `);
@@ -264,7 +273,7 @@ export function readyEmail(order, opts = {}) {
     </td></tr>
     ${addr.length ? panel('Collect from', addr) : ''}
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
-    ${totalsBlock(order)}
+    ${totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
       Bring your order number, ${esc(order.reference)}, with you.
     </td></tr>
@@ -288,7 +297,7 @@ export function collectedEmail(order, opts = {}) {
     ${factRow('Order number', esc(order.reference),
               'Collected', esc(niceDate(order.fulfilled)))}
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
-    ${totalsBlock(order)}
+    ${totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
       Keep this for your records. If anything is not right, just reply to this email.
     </td></tr>
@@ -391,7 +400,7 @@ export function dispatchedEmail(order, opts = {}) {
     ${factRow('Going to',
       [c.line1, c.line2, c.city, c.postcode, c.country].filter(Boolean).map(esc).join('<br>'), '', '')}
     ${(order.items || []).map((i) => itemBlock(origin, i)).join('')}
-    ${totalsBlock(order)}
+    ${totalsBlock(order, opts.settings)}
     <tr><td style="padding:26px 28px 20px;font-family:${SANS};font-size:13.5px;line-height:1.6;color:${MUTED}">
       Tracking can take a few hours to show its first scan.
     </td></tr>

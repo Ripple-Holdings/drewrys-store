@@ -32,6 +32,8 @@ import { DEFAULT_ZONES, DEFAULT_METHODS, resolveZone, resolveMethod } from './sh
 import { countryByCode } from './countries.js';
 import { normalisePromos, getPromoUses, evaluatePromos } from './promos.js';
 
+import { sellingPrice, productTaxable } from './vat.js';
+
 const API = {
   staging: 'https://api.teya.xyz',
   production: 'https://api.teya.com',
@@ -198,6 +200,13 @@ async function teyaFetch(env, path, init = {}, scope = SCOPE_CHECKOUT) {
 }
 
 export const DEFAULT_SETTINGS = {
+  // VAT. Prices on the site are INCLUSIVE, so this describes what is inside
+  // the price rather than anything added at checkout. Without these entries
+  // getSettings returns no rate, Number(undefined) becomes 0, and the report
+  // quietly says nothing is owed.
+  vat_registered: true,
+  vat_number: 'GB004838290',
+  vat_rate: 20,
   // Ben has no Facebook page, so it stays blank and the link hides itself.
   instagram_url: 'https://www.instagram.com/drewrys_haircare/',
   facebook_url: '',
@@ -277,8 +286,13 @@ export async function priceBasket(env, payload) {
     if (stock !== null && stock <= 0) continue;               // sold out
     const take = stock === null ? qty : Math.min(qty, stock); // never oversell
 
-    subtotal += p.price_pence * take;
-    items.push({ sku: p.slug, name: p.name, quantity: take, unit_amount: p.price_pence,
+    // The SELLING price: for a product entered EXCLUSIVE of VAT this is the net
+    // figure plus VAT, for everything else it is the figure as typed. Charging
+    // the net price by accident is the expensive direction.
+    const unit = sellingPrice(p, settings);
+    subtotal += unit * take;
+    items.push({ sku: p.slug, name: p.name, quantity: take, unit_amount: unit,
+                 vat_applicable: productTaxable(p, settings),
                  size: p.size || '', image: p.image || '' });
   }
   if (!items.length) throw new Error('empty basket');
@@ -395,12 +409,15 @@ export async function createSession(request, env) {
   }
 
   const reference = newReference();
+  // Stamped at pricing time so a later rate change never restates this order.
+  const vatRate = Number((await getSettings(env)).vat_rate) || 0;
 
   // Park the order before sending anyone to Teya, so the webhook has
   // something to attach the payment result to.
   await env.DREWRYS_KV.put(`order:${reference}`, JSON.stringify({
     reference, status: 'pending', created: new Date().toISOString(),
     ...basket,
+    vat_rate: vatRate,
     customer: customer.value,
   }), { expirationTtl: 60 * 60 * 24 * 90 });
 

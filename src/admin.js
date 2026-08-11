@@ -896,7 +896,11 @@ function render(){
       '</div></div>';
 
       var periods=vatPeriodList();
-      if(!VATR&&periods.length) VATR={from:periods[0].from,to:periods[0].to,label:periods[0].label};
+      // Default to the current quarter so the report has something to show,
+      // but mark it as coming from the quarter row, not the picker.
+      if(!VATR&&periods.length){
+        VATR={from:periods[0].from,to:periods[0].to,label:periods[0].label,src:'quarter'};
+      }
 
       // Quarters are buttons in their own right. They were making the popover
       // twice as tall for something that is one click either way.
@@ -907,7 +911,9 @@ function render(){
 
       // Date range picker. One trigger, one popover: preset list on the left,
       // two months side by side, chosen dates read out underneath.
-      var lbl=(VATR&&VATR.label)||'Choose a period';
+      // The trigger names a CUSTOM period only. Echoing the quarter you just
+      // pressed on the pill above it says nothing and reads like a bug.
+      var lbl=(VATR&&VATR.src&&VATR.src!=='quarter') ? VATR.label : 'Custom';
       h+='<div class="calwrap">'+
         '<button type="button" class="ghost calbtn" data-calopen="1">'+esc(lbl)+
           '<span class="calcar">&#9662;</span></button>';
@@ -1133,7 +1139,7 @@ document.addEventListener('click',function(e){
   if(t.dataset.calreset!==undefined){
     var p0=vatPeriodList()[0];
     CALPICK=null;
-    if(p0){ VATR={from:p0.from,to:p0.to,label:p0.label}; VAT=null; }
+    if(p0){ VATR={from:p0.from,to:p0.to,label:p0.label,src:'quarter'}; VAT=null; }
     CALOPEN=false; render(); return;
   }
 
@@ -1154,13 +1160,14 @@ document.addEventListener('click',function(e){
 
   if(t.dataset.calapply!==undefined){
     if(!CALPICK||!CALPICK.start||!CALPICK.end) return;
-    VATR={from:CALPICK.start,to:CALPICK.end,label:CALPICK.start+' to '+CALPICK.end};
+    VATR={from:CALPICK.start,to:CALPICK.end,
+          label:CALPICK.start+' to '+CALPICK.end, src:'range'};
     VAT=null; CALOPEN=false; render(); return;
   }
 
   if(t.dataset.vatq!==undefined){
     var q=vatPeriodList().filter(function(x){return x.id===t.dataset.vatq;})[0];
-    if(q){ VATR={from:q.from,to:q.to,label:q.label}; VAT=null;
+    if(q){ VATR={from:q.from,to:q.to,label:q.label,src:'quarter'}; VAT=null;
            CALPICK={start:q.from,end:q.to}; CALOPEN=false; render(); }
     return;
   }
@@ -1170,7 +1177,7 @@ document.addEventListener('click',function(e){
     if(k==='today'){ from=to; }
     else if(k==='yesterday'){ from=shiftDays(1); to=from; }
     else { from=shiftDays(parseInt(k,10)-1); }
-    VATR={from:from,to:to,label:label};
+    VATR={from:from,to:to,label:label,src:'preset'};
     CALPICK={start:from,end:to};
     VAT=null; CALOPEN=false; render(); return;
   }

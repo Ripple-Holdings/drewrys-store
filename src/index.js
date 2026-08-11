@@ -661,7 +661,8 @@ async function sendDueReviewRequests(env) {
       subject: `How did we do?`,
       html: reviewRequestEmail(order, {
         origin: env.SITE_ORIGIN,
-        settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        settings: await getSettings(env),
+        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
         token,
       }),
     });
@@ -1023,7 +1024,9 @@ async function handleAdmin(request, env, url, ctx) {
         feature_sub: String(st.feature_sub || '').slice(0, 80),
         vat_registered: st.vat_registered === true,
         vat_number: String(st.vat_number || '').slice(0, 30),
-        vat_rate: Math.max(0, Math.min(30, Number(st.vat_rate) || 0)),
+        vat_rate: (st.vat_rate === undefined || st.vat_rate === null || st.vat_rate === '')
+          ? DEFAULT_SETTINGS.vat_rate
+          : Math.max(0, Math.min(30, Number(st.vat_rate) || 0)),
         review_auto_publish: st.review_auto_publish === true,
         promos: (Array.isArray(st.promos) ? st.promos : normalisePromos({ promos: st.promos }))
           .map(cleanPromo).filter(Boolean).slice(0, 100),

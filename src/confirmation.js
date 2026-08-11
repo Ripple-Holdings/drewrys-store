@@ -11,6 +11,8 @@
  * depends on the browser having any state left.
  */
 
+import { vatForOrder } from './vat.js';
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const gbp = (p) => '£' + (Number(p || 0) / 100).toFixed(2);
@@ -108,7 +110,7 @@ h2{font-size:clamp(1.12rem,2.4vw,1.35rem);margin-bottom:16px}
  * reference reveals no more than a "still processing" line. Payment is
  * confirmed by Teya server to server, never by the browser arriving here.
  */
-export async function orderConfirmationPage(env, ref) {
+export async function orderConfirmationPage(env, ref, settings = {}) {
   if (!ref) {
     return shell('Order', `<h1>Order <em>not found</em></h1>
       <p class="lede">We could not find that order reference. If you have just
@@ -179,12 +181,12 @@ export async function orderConfirmationPage(env, ref) {
     </div>`).join('');
 
   const collect = o.fulfilment === 'collect';
-  const settings = o.collect_address || '';
+  const where = o.collect_address || '';
   const next = collect
     ? `<h2>Collecting from us</h2>
        <p>We will email you the moment your order is ready. Please wait for that
        email before coming down.</p>
-       ${settings ? `<p>${esc(settings)}</p>` : ''}`
+       ${where ? `<p>${esc(where)}</p>` : ''}`
     : `<h2>Delivery</h2>
        <p>We will email you with tracking as soon as your order is dispatched.</p>
        ${o.customer && o.customer.line1 ? `<p>Going to ${esc([o.customer.line1,
@@ -203,6 +205,11 @@ export async function orderConfirmationPage(env, ref) {
       <div class="tot"><span>${collect ? 'Collection' : 'Delivery'}</span><span>${
         o.shipping > 0 ? gbp(o.shipping) : 'Free'}</span></div>
       <div class="tot grand"><span>Total paid</span><span>${gbp(o.total)}</span></div>
+      ${(() => { const v = vatForOrder(o, settings); return v.applicable
+        ? `<div class="tot" style="padding-top:8px">${v.zeroRated
+            ? '<span>Zero-rated export, no VAT</span><span></span>'
+            : `<span>Includes VAT at ${v.rate}%</span><span>${gbp(v.vat)}</span>`}</div>`
+        : ''; })()}
     </div>
 
     <div class="card next">${next}</div>
