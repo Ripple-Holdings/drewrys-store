@@ -901,7 +901,6 @@ document.addEventListener('click',function(e){
       name='drewrys-newsletter.csv';
       rows=[['email','signed up']].concat(LD.subscribers.map(function(x){return [x.email,x.at];}));
     } else { return; }
-    }
     var q=String.fromCharCode(34), CRLF=String.fromCharCode(13,10), BOM=String.fromCharCode(65279);
     var csv=rows.map(function(r){return r.map(function(c){
       return q+String(c==null?'':c).split(q).join(q+q)+q;}).join(',');}).join(CRLF);
