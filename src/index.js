@@ -31,6 +31,7 @@ import { orderConfirmationPage } from './confirmation.js';
 import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail,
          cancelledEmail } from './refunds.js';
 import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js';
+import { vatForOrder, vatReport, vatPeriods, vatSettings, sellingPrice } from './vat.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
@@ -59,7 +60,10 @@ async function renderSite(request, env) {
 
   const cat = await getCatalogue(env);
   const settings = await getSettings(env);
-  const live = cat.products.filter((p) => p.active !== false);
+  const live = cat.products.filter((p) => p.active !== false)
+    // Show what will be charged. priceBasket computes the same figure, so a
+    // product entered exclusive of VAT cannot display its net price.
+    .map((p) => ({ ...p, price_pence: sellingPrice(p, settings) }));
   const allReviews = await getReviews(env);
 
   const payload = {
@@ -104,13 +108,21 @@ async function renderSite(request, env) {
 async function renderCheckout(env) {
   const cat = await getCatalogue(env);
   const settings = await getSettings(env);
-  const live = cat.products.filter((p) => p.active !== false);
+  const live = cat.products.filter((p) => p.active !== false)
+    // Show what will be charged. priceBasket computes the same figure, so a
+    // product entered exclusive of VAT cannot display its net price.
+    .map((p) => ({ ...p, price_pence: sellingPrice(p, settings) }));
   return html(checkoutHtml({
     products: live,
     stock: await stockMap(env, live),
     zones: zones(settings),
     methods: methods(settings),
-    countries: COUNTRIES.filter((c) => c.zone),
+    countries: (() => {
+      const live = new Set(zones(settings).map((z) => z.id));
+      return COUNTRIES.filter((c) => c.zone && live.has(c.zone));
+    })(),
+    // The hint under the dropdown has to name the zones that are actually on.
+    delivers_to: zones(settings).map((z) => z.name),
     free_over: settings.free_over || {},
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     address_lookup: !!env.ADDRESS_API_KEY,
@@ -197,7 +209,7 @@ async function sendOrderEmails(env, order) {
   const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
   const { customer, owner } = confirmationEmails(order, {
     origin: env.SITE_ORIGIN, collectAddress: addr,
-    contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+    settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
   });
   await sendEmail(env, { to: order.customer?.email,
     subject: `Drewrys order ${order.reference}`, html: customer });
@@ -346,6 +358,42 @@ async function logHook(env, entry) {
  * checkout that never completed was invisible and its reference unobtainable.
  * That is why there was no DRW- number to reconcile with.
  */
+/**
+ * GET /admin/vat?from=YYYY-MM-DD&to=YYYY-MM-DD
+ *
+ * Built from the orders in KV rather than the D1 mirror, because the mirror
+ * does not carry the delivery zone and the zone is what decides whether a sale
+ * is standard-rated or a zero-rated export.
+ */
+async function handleVatReport(request, env, url) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+
+  const from = String(url.searchParams.get('from') || '').slice(0, 10);
+  const to = String(url.searchParams.get('to') || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return json({ error: 'pass from and to as YYYY-MM-DD' }, 400);
+  }
+
+  const orders = [];
+  try {
+    let cursor;
+    do {
+      const page = await env.DREWRYS_KV.list({ prefix: 'order:', cursor, limit: 200 });
+      for (const k of page.keys) {
+        const raw = await env.DREWRYS_KV.get(k.name);
+        if (!raw) continue;
+        try { orders.push(JSON.parse(raw)); } catch { /* skip */ }
+      }
+      cursor = page.list_complete ? null : page.cursor;
+    } while (cursor);
+  } catch (e) {
+    return json({ error: 'could not read orders: ' + String(e && e.message || e) }, 500);
+  }
+
+  return json(vatReport(orders, await getSettings(env), from, to));
+}
+
 async function handleDiag(request, env, url) {
   const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
@@ -533,7 +581,7 @@ async function handleReview(request, env, token) {
         subject: 'Thank you from Drewrys',
         html: publicReviewInviteEmail(review, {
           origin: env.SITE_ORIGIN,
-          contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+          settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
           platforms,
           shareUrl: `${String(env.SITE_ORIGIN || '').replace(/\/$/, '')}/review/share/${review.id}`,
         }),
@@ -569,7 +617,7 @@ async function moderateReview(env, body) {
       subject: 'Thank you from Drewrys',
       html: publicReviewInviteEmail(review, {
         origin: env.SITE_ORIGIN,
-        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
         platforms,
         shareUrl: `${String(env.SITE_ORIGIN || '').replace(/\/$/, '')}/review/share/${review.id}`,
       }),
@@ -613,7 +661,7 @@ async function sendDueReviewRequests(env) {
       subject: `How did we do?`,
       html: reviewRequestEmail(order, {
         origin: env.SITE_ORIGIN,
-        contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
         token,
       }),
     });
@@ -775,6 +823,7 @@ async function fulfilOrder(env, body, ctx) {
                             : `Your Drewrys refund for order ${ref}`,
         html: build(order, {
           origin: env.SITE_ORIGIN, amount,
+          settings: await getSettings(env),
           contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
         }),
       }));
@@ -796,7 +845,7 @@ async function fulfilOrder(env, body, ctx) {
     const settings = await getSettings(env);
     const addr = settings.collect_address || env.SHOP_COLLECT_ADDR || '';
     const opts = { origin: env.SITE_ORIGIN, collectAddress: addr,
-      contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL };
+      settings, contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL };
     const byStage = {
       ready: { subject: `Your Drewrys order ${ref} is ready to collect`,
                html: () => readyEmail(order, opts) },
@@ -895,6 +944,8 @@ async function handleAdmin(request, env, url, ctx) {
                  || (p.image_key ? `/img/product-${p.image_key}.png` : ''),
           description: String(p.description || '').slice(0, 2000),
           price_pence: Math.max(0, parseInt(p.price_pence, 10) || 0),
+          vat_applicable: p.vat_applicable !== false,
+          price_mode: p.price_mode === 'exc' ? 'exc' : 'inc',
           ingredients: Array.isArray(p.ingredients) ? p.ingredients : [],
           howto: Array.isArray(p.howto) ? p.howto : [],
           active: p.active !== false,
@@ -970,6 +1021,9 @@ async function handleAdmin(request, env, url, ctx) {
         feature_quote: String(st.feature_quote || '').slice(0, 400),
         feature_name: String(st.feature_name || '').slice(0, 80),
         feature_sub: String(st.feature_sub || '').slice(0, 80),
+        vat_registered: st.vat_registered === true,
+        vat_number: String(st.vat_number || '').slice(0, 30),
+        vat_rate: Math.max(0, Math.min(30, Number(st.vat_rate) || 0)),
         review_auto_publish: st.review_auto_publish === true,
         promos: (Array.isArray(st.promos) ? st.promos : normalisePromos({ promos: st.promos }))
           .map(cleanPromo).filter(Boolean).slice(0, 100),
@@ -993,6 +1047,8 @@ async function handleAdmin(request, env, url, ctx) {
     return_reasons: RETURN_REASONS,
     no_restock_reasons: NO_RESTOCK_REASONS,
     leads: await listLeads(env),
+    vat_periods: vatPeriods(),
+    vat: vatSettings(adminSettings),
     reviews: await getReviews(env),
     platforms: livePlatforms(adminSettings),
     promo_uses: await getPromoUses(env),
@@ -1046,6 +1102,7 @@ export default {
       if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {
         return handleWebhook(request, env, ctx);
       }
+      if (path === '/admin/vat') return handleVatReport(request, env, url);
       if (path === '/admin/diag') return handleDiag(request, env, url);
       if (path === '/admin/webhook-log') return handleWebhookLog(request, env, url);
       if (path === '/admin/reconcile') return handleReconcile(request, env, url, ctx);
@@ -1054,7 +1111,8 @@ export default {
         // be served from cache, or the customer sits on a stale "still being
         // confirmed" forever however many times it reloads.
         return new Response(
-          await orderConfirmationPage(env, (url.searchParams.get('ref') || '').trim()),
+          await orderConfirmationPage(env, (url.searchParams.get('ref') || '').trim(),
+                                    await getSettings(env)),
           { headers: { 'Content-Type': 'text/html;charset=utf-8',
                        'Cache-Control': 'no-store, must-revalidate' } });
       }

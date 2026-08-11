@@ -14,6 +14,19 @@ import { PAYMARKS } from './paymarks.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+/**
+ * "We deliver to the Isle of Man and the UK." Built from the zones that are
+ * actually switched on, because hardcoding the sentence meant turning Europe
+ * off in the admin left the page still promising it.
+ */
+function deliversTo(state) {
+  const names = (state && state.delivers_to) || [];
+  if (!names.length) return 'Collection only at the moment.';
+  const list = names.length === 1 ? names[0]
+    : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+  return `We deliver to ${list}.`;
+}
+
 export function checkoutHtml(state) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -196,7 +209,7 @@ select{cursor:pointer}
       <h2>Delivery address</h2>
       <div class="f"><label for="dest">Country</label>
         <select id="dest"></select>
-        <p class="hint">We deliver to the Isle of Man, the UK and Europe.</p></div>
+        <p class="hint">${deliversTo(state)}</p></div>
       <div class="f"><label for="pc">Postcode</label>
         <div class="pcrow"><input id="pc" autocomplete="postal-code" placeholder="IM1 1AA">
           <button type="button" id="find" hidden>Find</button></div>
