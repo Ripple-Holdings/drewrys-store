@@ -749,16 +749,40 @@ export async function refundPayment(env, { transactionId, amount, reference }) {
              error: 'Teya has accepted the refund but has not completed it yet' };
   }
 
-  const data = await res.json().catch(() => ({}));
+  // Read the body as TEXT first. A canned message keyed on the status code was
+  // hiding Teya's own words: a 403 was reported as a missing refunds/create
+  // scope long after the token was proven to carry that scope.
+  const raw = await res.text().catch(() => '');
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; } catch { data = {}; }
+
   if (!res.ok) {
-    const known = { 401: 'Teya rejected our credentials',
-      403: 'this credential is not allowed to issue refunds - the profile needs the refunds/create scope',
-      404: 'Teya does not recognise that transaction',
+    // Everything Teya said, so the next person is not guessing from a number.
+    const hdrs = {};
+    res.headers.forEach((v, k) => {
+      if (/^(x-|www-authenticate|content-type)/i.test(k)) hdrs[k] = v;
+    });
+    console.error('teya refund failed', res.status,
+      'body:', raw ? raw.slice(0, 900) : '(empty)',
+      'headers:', JSON.stringify(hdrs),
+      'sent:', JSON.stringify({ transaction_id: transactionId,
+        amount: Math.round(amount), merchant_reference: reference,
+        idempotency_key: `refund-${reference || transactionId}` }));
+
+    // THEIR wording wins. Ours is only a last resort, and it says plainly that
+    // it is a guess from the status code.
+    const theirs = data.status_reason || data.message || data.error_description
+      || data.error || data.detail || data.title;
+    const fallback = {
+      401: 'Teya rejected our credentials',
+      403: `Teya refused the refund with 403 and gave no reason in the body. The token does carry refunds/create, so this is not the scope. Check the Worker log for the full response.`,
+      404: 'Teya does not recognise that transaction id',
       409: 'a refund for this order has already been submitted',
-      422: 'Teya refused the amount' };
-    console.error('teya refund failed', res.status, JSON.stringify(data));
-    return { ok: false, error: data.status_reason || known[res.status] ||
-             data.message || `Teya returned ${res.status}` };
+      422: 'Teya refused the amount',
+    }[res.status] || `Teya returned ${res.status}`;
+
+    return { ok: false, status: res.status, body: raw ? raw.slice(0, 400) : '',
+             error: theirs ? `Teya says: ${theirs}` : fallback };
   }
 
   const status = String(data.status || '').toUpperCase();
