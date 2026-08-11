@@ -14,12 +14,15 @@
 export const BUSINESS = {
   legal_name: 'DGG Limited',
   trading_as: 'Drewrys',
-  company_number: 'TO BE CONFIRMED',      // IoM registered company number
-  registered_address: 'TO BE CONFIRMED',  // full registered office address
-  trading_address: 'TO BE CONFIRMED',     // the shop, where customers collect
-  returns_address: 'TO BE CONFIRMED',     // where returns are posted
-  email: 'ben@drewrys.im',
-  phone: 'TO BE CONFIRMED',
+  company_number: '130898C',
+  registered_address: 'Ground Floor, Falcon House, Ridgeway Street, Douglas, Isle of Man, IM1 1EL',
+  trading_address: 'Falcon House, 22 Ridgeway Street, Douglas, Isle of Man, IM1 1EL',
+  // Not separately supplied, so returns go to the shop. Change this if Ben
+  // wants them somewhere else.
+  returns_address: 'Falcon House, 22 Ridgeway Street, Douglas, Isle of Man, IM1 1EL',
+  email: 'hello@drewrys.store',
+  phone: '07624 373979',
+  vat_number: 'GB004838290',
   site: 'drewrys.store',
 
   // Delivery timescales, as advertised. Keep honest - these are promises.
@@ -46,29 +49,43 @@ const updated = 'July 2026';
 function page(title, intro, body) {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title} · Drewrys</title>
+<title>${title} \u00b7 Drewrys</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
 <meta name="robots" content="index,follow">
+<link rel="stylesheet" href="/fonts-order.css">
 <style>
-:root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--ink:#191C21;--peanut:#C79A6B;
-  --peanut-deep:#9A6C3E;--line:rgba(25,28,33,.16);--muted:rgba(25,28,33,.62)}
+:root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--ink:#191C21;--slate:#2B3037;
+  --peanut:#C79A6B;--peanut-deep:#9A6C3E;--line:rgba(25,28,33,.16);
+  --muted:rgba(25,28,33,.62)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--cotton);color:var(--ink);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-family:"Geist",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   line-height:1.62;-webkit-font-smoothing:antialiased}
-.top{border-bottom:1px solid var(--line)}
-.top .in{max-width:820px;margin:0 auto;padding:20px 24px;display:flex;align-items:center;gap:14px}
-.top img{height:30px;width:auto}
-.top a{color:var(--ink);text-decoration:none;font-weight:500;font-size:14.5px}
-.top .sp{flex:1}
-main{max-width:820px;margin:0 auto;padding:52px 24px 96px}
-h1{font-size:clamp(2rem,5vw,2.9rem);font-weight:600;letter-spacing:-.02em;line-height:1.08}
-.lede{margin-top:14px;font-size:1.06rem;color:var(--muted);max-width:60ch}
+
+/* Solid black masthead, mark centred, Back sitting to the right of it and
+   dropping under on a phone rather than squashing the logo off centre. */
+.top{background:var(--ink)}
+.top .in{max-width:760px;margin:0 auto;padding:22px 24px;position:relative;
+  display:flex;align-items:center;justify-content:center;min-height:64px}
+.top img{height:38px;width:auto;display:block}
+.top .back{position:absolute;right:24px;top:50%;transform:translateY(-50%);
+  background:var(--peanut);color:var(--ink);text-decoration:none;
+  font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:600;
+  font-size:.9rem;padding:10px 20px;border-radius:99px;white-space:nowrap}
+.top .back:hover{background:var(--cotton)}
+
+main{max-width:760px;margin:0 auto;padding:clamp(34px,6vw,58px) 24px 90px}
+h1,h2,h3{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
+  letter-spacing:-.02em}
+h1{font-size:clamp(1.9rem,5.2vw,2.7rem);line-height:1.08}
+.lede{margin-top:14px;font-size:clamp(1rem,2.2vw,1.08rem);color:var(--muted)}
 .meta{margin-top:10px;font-size:.83rem;color:var(--muted)}
-h2{margin:44px 0 12px;font-size:1.24rem;font-weight:600;letter-spacing:-.01em}
+h2{margin:clamp(32px,5vw,46px) 0 12px;font-size:clamp(1.15rem,2.8vw,1.3rem);line-height:1.2}
 h3{margin:26px 0 8px;font-size:1.02rem;font-weight:600}
-p{margin:12px 0;max-width:68ch}
-ul,ol{margin:12px 0 12px 22px;max-width:66ch}
+/* No per-element max-width: the column IS the measure, so everything lines up
+   with the heading instead of hugging the left of a wider band. */
+p{margin:12px 0}
+ul,ol{margin:12px 0 12px 22px}
 li{margin:7px 0}
 a{color:var(--peanut-deep)}
 strong{font-weight:600}
@@ -76,18 +93,30 @@ strong{font-weight:600}
   padding:18px 20px;margin:22px 0}
 .box p:first-child{margin-top:0}.box p:last-child{margin-bottom:0}
 .todo{background:#f7e2e2;color:#8a2f2f;padding:1px 7px;border-radius:5px;font-weight:600}
-table{border-collapse:collapse;margin:16px 0;width:100%;max-width:560px;font-size:.95rem}
+
+/* Tables scroll rather than squash, which is what broke them on a phone. */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:16px 0}
+table{border-collapse:collapse;width:100%;min-width:420px;font-size:.95rem}
 th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
-th{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
-footer{border-top:1px solid var(--line);margin-top:20px}
-footer .in{max-width:820px;margin:0 auto;padding:26px 24px;display:flex;gap:20px;
-  flex-wrap:wrap;font-size:.87rem;color:var(--muted)}
-footer a{color:var(--muted)}
-@media(max-width:560px){main{padding:34px 20px 72px}}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);font-weight:600}
+
+footer{background:var(--ink);color:var(--cotton)}
+footer .in{max-width:760px;margin:0 auto;padding:30px 24px;display:flex;gap:22px;
+  flex-wrap:wrap;align-items:center;font-size:.88rem;color:rgba(243,237,225,.72)}
+footer a{color:var(--cotton);text-decoration:none}
+footer a:hover{text-decoration:underline}
+
+@media(max-width:640px){
+  .top .in{flex-direction:column;gap:14px;padding:20px}
+  .top .back{position:static;transform:none}
+  main{padding:30px 20px 70px}
+  footer .in{gap:14px;padding:26px 20px}
+}
 </style></head><body>
 <div class="top"><div class="in">
-  <a href="/"><img src="/img/logo-d.png" alt="Drewrys"></a>
-  <span class="sp"></span><a href="/">&larr; Back to the shop</a>
+  <a href="/" aria-label="Drewrys"><img src="/img/logo-d-white.png" alt="Drewrys"></a>
+  <a class="back" href="/">Back to the shop</a>
 </div></div>
 <main>
   <h1>${title}</h1>
@@ -103,9 +132,11 @@ footer a{color:var(--muted)}
 </body></html>`;
 }
 
+
 const who = `<div class="box">
   <p><strong>${f('trading_as')}</strong> is a trading name of ${f('legal_name')},
-  a company registered in the Isle of Man, company number ${f('company_number')}.</p>
+  a company registered in the Isle of Man, company number ${f('company_number')}.
+  VAT registration number ${f('vat_number')}.</p>
   <p>Registered office: ${f('registered_address')}<br>
   Shop: ${f('trading_address')}<br>
   Email: <a href="mailto:${BUSINESS.email}">${BUSINESS.email}</a> &middot;
@@ -145,15 +176,20 @@ order at the correct price or cancel it for a full refund.</p>
 may be withdrawn at any time. All prices and totals are recalculated on our
 server when you check out, so the amount charged is always the correct one.</p>
 
+<p>Prices shown INCLUDE VAT at the rate in force. The Isle of Man and the United
+Kingdom are a single VAT territory, so VAT applies to orders delivered or
+collected there. Orders exported to Europe are zero-rated for VAT, and the price
+you pay is the price shown either way. Your order confirmation shows the VAT
+included in what you paid.</p>
 <h2>4. Delivery and collection</h2>
-<table>
+<div class="tw"><table>
   <tr><th>Option</th><th>Cost</th><th>Timescale</th></tr>
   <tr><td>Collect from the shop</td><td>Free</td><td>${f('dispatch')}</td></tr>
   <tr><td>Isle of Man, next day tracked</td><td>&pound;2.50</td><td>${f('delivery_iom')}</td></tr>
   <tr><td>United Kingdom, tracked</td><td>&pound;4.50</td><td>${f('delivery_uk')}</td></tr>
   <tr><td>Europe, standard</td><td>&pound;6.00</td><td>${f('delivery_intl')}</td></tr>
   <tr><td>Europe, tracked</td><td>&pound;12.50</td><td>${f('delivery_intl')}</td></tr>
-</table>
+</table></div>
 <p>We do not deliver outside the Isle of Man, the United Kingdom and Europe at
 present. Rates are confirmed in your basket before you pay, and those shown
 there are the ones that apply.</p>
@@ -338,7 +374,7 @@ ${who}
 </ul>
 
 <h2>Why we use it, and our lawful basis</h2>
-<table>
+<div class="tw"><table>
   <tr><th>Purpose</th><th>Lawful basis</th></tr>
   <tr><td>Taking payment and sending your order</td><td>Performance of our contract with you</td></tr>
   <tr><td>Emailing your confirmation and any updates</td><td>Performance of our contract with you</td></tr>
@@ -350,7 +386,7 @@ ${who}
   <tr><td>Counting visits to the shop</td><td>Our legitimate interest in knowing the site works, using data that cannot identify you</td></tr>
   <tr><td>Replying to a wholesale enquiry</td><td>Our legitimate interest in responding to you</td></tr>
   <tr><td>Marketing emails, if you sign up</td><td>Your consent, withdrawable at any time</td></tr>
-</table>
+</table></div>
 
 <h2>Who else handles it</h2>
 <p>We use a small number of service providers, each only for what is listed:</p>
