@@ -372,6 +372,49 @@ async function logHook(env, entry) {
  * token is redacted before it leaves the Worker, so the output is safe to paste
  * into a support chat.
  */
+/**
+ * GET /admin/order?ref=DRW-XXXX&key=<ADMIN_KEY>
+ *
+ * Read only. Shows the fields a refund depends on, so "is the stored
+ * transaction id the right shape" can be answered without attempting another
+ * refund against a live card.
+ */
+async function handleOrderPeek(request, env, url) {
+  const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
+  if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
+
+  const ref = String(url.searchParams.get('ref') || '').trim().slice(0, 40);
+  if (!ref) return json({ error: 'pass ref=DRW-XXXX' }, 400);
+  const raw = await env.DREWRYS_KV.get(`order:${ref}`);
+  if (!raw) return json({ error: 'no order with that reference' }, 404);
+
+  let o = {};
+  try { o = JSON.parse(raw); } catch { return json({ error: 'order is not valid json' }, 500); }
+
+  const txn = o.transaction_id || '';
+  return new Response(JSON.stringify({
+    reference: o.reference,
+    status: o.status,
+    created: o.created,
+    settled: o.settled || null,
+    total_pence: o.total,
+    session_id: o.session_id || null,
+    transaction_id: txn || '(none stored)',
+    // The shape is the point: Teya's payment ids start tr_. A session id or a
+    // payment link id here would explain a refusal that is nothing to do with
+    // the credential.
+    transaction_id_looks_like: !txn ? 'nothing stored'
+      : (/^tr_/.test(txn) ? 'a Teya payment id (tr_...)'
+        : (txn === o.session_id ? 'the SESSION id, not a payment id'
+          : 'something else, ' + txn.length + ' chars')),
+    refund_state: o.refund_state || null,
+    refund: o.refund || null,
+    vat_rate: o.vat_rate === undefined ? '(not stamped, predates VAT)' : o.vat_rate,
+  }, null, 2), {
+    headers: { 'Content-Type': 'application/json;charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 async function handleTokenDiag(request, env, url) {
   const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) return json({ error: 'unauthorised' }, 401);
@@ -1127,6 +1170,7 @@ export default {
       if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {
         return handleWebhook(request, env, ctx);
       }
+      if (path === '/admin/order') return handleOrderPeek(request, env, url);
       if (path === '/admin/teya-token') return handleTokenDiag(request, env, url);
       if (path === '/admin/vat') return handleVatReport(request, env, url);
       if (path === '/admin/diag') return handleDiag(request, env, url);
