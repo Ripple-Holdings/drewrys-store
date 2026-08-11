@@ -334,6 +334,29 @@ function monthName(y,m){ return MONTHS[m]+' '+y; }
 function nextY(c){ return c.m===11 ? c.y+1 : c.y; }
 function nextM(c){ return c.m===11 ? 0 : c.m+1; }
 
+// The last six quarters, worked out here rather than taken from the server, so
+// the tab still works if an older build is live. Six covers Q1 to Q4 whatever
+// month it is.
+// One source for the quarter list, used by the render AND the click handler.
+// They had drifted: the buttons drew from the fallback while the handler still
+// looked in S.vat_periods, so a quarter click quietly did nothing.
+function vatPeriodList(){
+  return (S.vat_periods&&S.vat_periods.length)?S.vat_periods:localQuarters();
+}
+
+function localQuarters(){
+  var out=[], now=new Date(), y=now.getUTCFullYear(), q=Math.floor(now.getUTCMonth()/3), i;
+  for(i=0;i<6;i++){
+    var qq=q-i, yy=y;
+    while(qq<0){ qq+=4; yy-=1; }
+    var sm=qq*3;
+    var end=new Date(Date.UTC(yy,sm+3,0));
+    out.push({id:yy+'-Q'+(qq+1), label:'Q'+(qq+1)+' '+yy,
+      from:yy+'-'+pad2(sm+1)+'-01', to:ymdOf(end)});
+  }
+  return out;
+}
+
 function monthGrid(y,m){
   var lead=new Date(Date.UTC(y,m,1)).getUTCDay();     // 0 = Sunday
   var days=new Date(Date.UTC(y,m+1,0)).getUTCDate();
@@ -872,7 +895,7 @@ function render(){
       'never restates an order already taken.</div>'+
       '</div></div>';
 
-      var periods=S.vat_periods||[];
+      var periods=vatPeriodList();
       if(!VATR&&periods.length) VATR={from:periods[0].from,to:periods[0].to,label:periods[0].label};
 
       // Quarters are buttons in their own right. They were making the popover
@@ -933,9 +956,10 @@ function render(){
       }
       h+='</div>';
 
-      if(!(S.vat||{}).registered){
-        h+='<div class="note">VAT is switched off in Delivery settings, so nothing is '+
-           'being charged or reported. Turn it on there if the business is registered.</div>';
+      var vatOn=(S.vat&&S.vat.registered)||S.settings.vat_registered===true;
+      if(!vatOn){
+        h+='<div class="note">VAT is switched off. Tick "This business is VAT registered" '+
+           'above and save, and the report appears.</div>';
       } else if(!VAT){
         h+='<div class="note">Loading...</div>';
         if(VATR) fetch('/admin/vat?from='+VATR.from+'&to='+VATR.to,{headers:{'x-admin-key':KEY}})
@@ -1107,7 +1131,7 @@ document.addEventListener('click',function(e){
   }
   if(t.dataset.calclear!==undefined){ CALPICK=null; render(); return; }
   if(t.dataset.calreset!==undefined){
-    var p0=(S.vat_periods||[])[0];
+    var p0=vatPeriodList()[0];
     CALPICK=null;
     if(p0){ VATR={from:p0.from,to:p0.to,label:p0.label}; VAT=null; }
     CALOPEN=false; render(); return;
@@ -1135,7 +1159,7 @@ document.addEventListener('click',function(e){
   }
 
   if(t.dataset.vatq!==undefined){
-    var q=(S.vat_periods||[]).filter(function(x){return x.id===t.dataset.vatq;})[0];
+    var q=vatPeriodList().filter(function(x){return x.id===t.dataset.vatq;})[0];
     if(q){ VATR={from:q.from,to:q.to,label:q.label}; VAT=null;
            CALPICK={start:q.from,end:q.to}; CALOPEN=false; render(); }
     return;
