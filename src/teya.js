@@ -923,40 +923,49 @@ export async function tokenDiagnostic(env, scope = SCOPE_REFUND, sample = {}) {
 
 
 /**
- * Which refunds path is actually live on this gateway?
+ * WHY is POST /v3/refunds being stopped at nginx, when Teya's own WooCommerce
+ * plugin (300+ live installs) posts to EXACTLY api.teya.com/v3/refunds and
+ * refunds money?
  *
- * v2 of this probe. v1 used GET, and its verdict had a hole: a bog-standard
- * nginx `limit_except POST { deny all; }` returns the same bare 403 page on a
- * GET to a LIVE location as the default deny returns for a path that does not
- * exist. So "identical to nonsense" proved only that nginx refuses GET there,
- * not that the path is dead. The 11/08 GET run is therefore inconclusive on
- * /v3/refunds and /v2/refunds.
+ * v3 of this probe. v2 established by POST that both refund paths answer with
+ * the nginx page while the same token on checkout reaches Kong — so the route
+ * exists for the plugin but our REQUEST SHAPE is being rejected at the edge.
+ * The differences between the plugin's request and ours:
  *
- * This version POSTs an EMPTY JSON body `{}` — the method the real call uses.
- * No transaction_id means nothing can ever be refunded or created; a live
- * route answers with a JSON validation or auth error from Kong or the service,
- * a dead one answers with the same nginx HTML as the nonsense control.
+ *   User-Agent    WordPress always sends one; Workers fetch sends NONE.
+ *                 A WAF rule that 403s UA-less requests is as common as dirt,
+ *                 and checkout's location being exempt would explain everything
+ *   Accept        the plugin sends application/json, we send nothing
+ *   Idempotency-Key   the plugin sends a UUID v4, ours is a readable string
  *
- * Candidates, in order of evidence:
- *   /v2/refunds   the production service link declared by Teya's own
- *                 WooCommerce plugin, which provably refunds money
- *   /v3/refunds   the path in the beta OpenAPI spec (which names NO host)
- *   nonsense      the dead-path control
- *   /v2/checkout/sessions with `{}` and the refund scope — the gateway
- *                 control; any JSON answer proves the request reached Kong
+ * So: /v3/refunds is hit four ways — bare (our current shape), +UA only,
+ * +Accept only, and full plugin-shape (UA + Accept + UUID key) — plus the
+ * nonsense path in full plugin-shape as the control. If a variant flips from
+ * nginx HTML to Kong/API JSON, that variant's added header is the answer, and
+ * the fix is adding it to teyaFetch. If nonsense-with-headers reaches Kong
+ * too (a 404 JSON), that is CONFIRMATION the filter was header-based, not
+ * path-based. Body is `{}` throughout: no transaction_id, nothing can ever
+ * be created.
  */
 export async function pathProbe(env) {
   const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
-  const paths = [
-    ['plugin production URL', '/v2/refunds'],
-    ['the one we use', '/v3/refunds'],
-    ['deliberate nonsense', '/v3/definitely-not-a-real-path-xyz'],
-    ['gateway control', '/v2/checkout/sessions'],
+  const UA = 'drewrys-store/1.0 (+https://drewrys.store)';
+  // Fixed, valid UUID v4 shape so the probe stays deterministic. An empty
+  // body fails validation and stores nothing regardless.
+  const UUID_KEY = 'a3f1c2d4-5b6e-4f70-9a81-b2c3d4e5f601';
+  const variants = [
+    ['bare (current teyaFetch shape)', '/v3/refunds', {}],
+    ['+ User-Agent only', '/v3/refunds', { 'User-Agent': UA }],
+    ['+ Accept only', '/v3/refunds', { 'Accept': 'application/json' }],
+    ['full plugin shape', '/v3/refunds',
+      { 'User-Agent': UA, 'Accept': 'application/json' }, UUID_KEY],
+    ['nonsense path, full plugin shape', '/v3/definitely-not-a-real-path-xyz',
+      { 'User-Agent': UA, 'Accept': 'application/json' }, UUID_KEY],
   ];
   const out = { base, method: 'POST', body_sent: '{}', scope_used: SCOPE_REFUND,
                 results: [] };
 
-  for (const [label, path] of paths) {
+  for (const [label, path, extra, idemKey] of variants) {
     let entry = { label, path, status: null, body: '', note: '' };
     try {
       const res = await fetch(`${base}${path}`, {
@@ -964,9 +973,8 @@ export async function pathProbe(env) {
         headers: {
           'Authorization': await authHeader(env, false, SCOPE_REFUND),
           'Content-Type': 'application/json',
-          // Deterministic and unique to the probe. A request with no
-          // transaction_id fails validation and stores nothing anyway.
-          'Idempotency-Key': 'path-probe-empty-body',
+          'Idempotency-Key': idemKey || 'path-probe-empty-body',
+          ...extra,
         },
         body: '{}',
       });
@@ -976,7 +984,7 @@ export async function pathProbe(env) {
       const isHtml = /<html/i.test(txt);
       entry.note = isHtml
         ? 'nginx HTML page — never reached the API'
-        : (txt ? 'JSON/text from the API — this route is LIVE, read the body'
+        : (txt ? 'JSON/text from the API — this variant GETS THROUGH'
                : 'empty body, status alone');
     } catch (e) {
       entry.note = 'threw: ' + String(e && e.message || e);
@@ -984,16 +992,17 @@ export async function pathProbe(env) {
     out.results.push(entry);
   }
 
-  const v2 = out.results[0];
-  const v3 = out.results[1];
-  const live = (r) => r.body && !/<html/i.test(r.body);
+  const through = (r) => r.body && !/<html/i.test(r.body);
+  const [bare, ua, accept, full] = out.results;
   out.verdict =
-    live(v2) && !live(v3)
-      ? 'POST /v2/refunds reaches the API and /v3/refunds does not. The fix is the path constant in refundPayment.'
-    : live(v3) && !live(v2)
-      ? '/v3/refunds is live after all — the 403 on the real call is about the request, not the route. Read its body.'
-    : live(v2) && live(v3)
-      ? 'both answer JSON — compare the two bodies to pick the right one'
-      : 'neither refunds path reaches the API on this host even by POST. It is a host problem — wait for Teya.';
+    !through(bare) && through(ua)
+      ? 'The edge blocks requests with NO User-Agent. Fix: send a User-Agent from teyaFetch.'
+    : !through(bare) && through(accept)
+      ? 'The edge wants an Accept header. Fix: send Accept: application/json from teyaFetch.'
+    : !through(bare) && through(full)
+      ? 'Only the full plugin shape gets through — compare the three partial rows to see which pieces are required.'
+    : through(bare)
+      ? 'Even the bare shape got through this time — the block may be conditional (rate/WAF). Rerun.'
+      : 'No variant got through. The filter is not one of these headers — wait for Teya.';
   return out;
 }
