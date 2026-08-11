@@ -128,10 +128,36 @@ export async function orderConfirmationPage(env, ref) {
   let o = {};
   try { o = JSON.parse(raw); } catch { o = {}; }
 
+  // KV is EVENTUALLY consistent and caches a read at the edge for 60 seconds.
+  // createSession writes the pending order and reads it straight back, caching
+  // the PENDING copy at that colo; the webhook then writes `paid` from Teya's
+  // colo in Dublin. On 10/08 that left this page showing "being confirmed" for
+  // 48 seconds after the payment had already settled.
+  //
+  // D1 is strongly consistent and the webhook mirrors every paid order into it,
+  // so ask D1 whether the money moved and use KV only for the detail. This
+  // matters more now post_success_payment=REDIRECT lands the customer here
+  // within a second of paying, usually ahead of the webhook.
+  const kvSaid = o.status;
+  if (o.status !== 'paid' && env.DB) {
+    try {
+      const row = await env.DB.prepare('SELECT reference FROM ord WHERE reference = ?')
+        .bind(ref).first();
+      if (row) o.status = 'paid';
+    } catch (e) {
+      console.error('order page: D1 check failed', String(e && e.message || e));
+    }
+  }
+  // Both sources, on every render, so this never has to be argued from memory.
+  console.log('order page', ref, '| KV said', kvSaid, '| D1 said',
+              o.status === 'paid' ? 'paid' : (env.DB ? 'no row' : 'not bound'),
+              '| showing', o.status === 'paid' ? 'CONFIRMED' : 'pending');
+
   if (o.status !== 'paid') {
-    // The webhook can land a second or two after the customer does.
+    // With REDIRECT the customer arrives within a second of paying, so poll
+    // quickly rather than leaving them on this for six seconds at a time.
     return shell('Order received', `
-      <meta http-equiv="refresh" content="6">
+      <meta http-equiv="refresh" content="2">
       <h1>Thank you, <em>we have your order.</em></h1>
       <p class="lede">Payment is still being confirmed by our payment provider.
       This normally takes a few seconds. Your confirmation email will arrive as

@@ -427,14 +427,12 @@ export async function createSession(request, env) {
     store_id: env.TEYA_STORE_ID,
     amount: { value: basket.total, currency: 'GBP' },
     type: 'SALE',
-    // redirect_url is the field named in Teya's own API reference example
-    // (10/08/2026), and their sample value points at a merchant "processing"
-    // page, which is what an automatic redirect after payment looks like.
-    // success_url and cancel_url stay: they are what the "Back to store"
-    // button has been using, and if they are not in Teya's schema they are
-    // ignored rather than rejected - sessions have been creating fine with
-    // them present all along.
-    redirect_url: `${origin}/order?ref=${reference}`,
+    // Confirmed by Teya support 10/08/2026: post_success_payment controls
+    // whether hosted checkout shows the "Payment approved" screen.
+    // SHOW_SUCCESS_PAGE is the default; REDIRECT sends the customer straight
+    // to success_url instead. redirect_url, which their docs example shows,
+    // is NOT the field for this and has been removed.
+    post_success_payment: 'REDIRECT',
     success_url: `${origin}/order?ref=${reference}`,
     cancel_url: `${origin}/checkout?cancelled=1&ref=${reference}`,
   };
