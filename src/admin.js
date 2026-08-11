@@ -383,6 +383,20 @@ function monthGrid(y,m){
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
 var pounds=function(pence){return (Number(pence||0)/100).toFixed(2);};
+// Shop-local timestamps. Everything is STORED as UTC ISO (toISOString), which
+// reads an hour behind during British Summer Time if sliced straight into the
+// page. Formatted in Europe/London so BST/GMT flips itself twice a year -
+// never a hardcoded +1 - and reads as shop time whatever device views it.
+var ldt=function(iso){
+  if(!iso) return '';
+  var d=new Date(iso);
+  if(isNaN(d.getTime())) return String(iso).slice(0,16).replace('T',' ');
+  var p={};
+  new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/London',year:'numeric',
+    month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})
+    .formatToParts(d).forEach(function(x){p[x.type]=x.value;});
+  return p.year+'-'+p.month+'-'+p.day+' '+p.hour+':'+p.minute;
+};
 var toPence=function(v){return Math.round(parseFloat(String(v).replace(/[^0-9.]/g,''))*100)||0;};
 var carrierLabel=function(id){
   var c=(S.carriers||[]).filter(function(x){return x.id===id;})[0];
@@ -696,7 +710,7 @@ function render(){
 
       h+='<div class="card open"><div class="head" style="cursor:default">'+
         '<div class="hmeta"><b>'+esc(o.reference)+' &middot; £'+pounds(o.total)+'</b>'+
-        '<span>'+esc(String(o.settled||o.created||'').slice(0,16).replace('T',' '))+' &middot; '+
+        '<span>'+esc(ldt(o.settled||o.created))+' &middot; '+
         (collect?'Collection':'Delivery'+(o.method?' &middot; '+esc(o.method.name):''))+'</span></div>'+
         badge+'</div><div class="body">'+
         '<table><tr><th>Item</th><th>Qty</th><th>Line</th></tr>'+
@@ -715,7 +729,7 @@ function render(){
              '<div class="hint">Emails the customer to come and get it. '+
              'Mark it collected later, when they actually have.</div>';
         } else if(o.status==='ready'){
-          h+='<div class="doneline">Marked ready '+esc(String(o.ready_at||'').slice(0,16).replace('T',' '))+
+          h+='<div class="doneline">Marked ready '+esc(ldt(o.ready_at))+
             (n.ready?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
             '<button type="button" class="fulfil" data-act="collected" data-ref="'+esc(o.reference)+'">'+
             'Customer has collected it</button>'+
@@ -724,7 +738,7 @@ function render(){
             '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend ready email</button>'+
             '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
         } else {
-          h+='<div class="doneline">Collected '+esc(String(o.fulfilled||'').slice(0,16).replace('T',' '))+'</div>'+
+          h+='<div class="doneline">Collected '+esc(ldt(o.fulfilled))+'</div>'+
             '<div class="row" style="margin-top:10px">'+
             '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
         }
@@ -741,7 +755,7 @@ function render(){
             '<div class="hint">Emails the customer with the tracking link. '+
             'Leave tracking blank if there is none - they still get told it is on its way.</div>';
         } else {
-          h+='<div class="doneline">Dispatched '+esc(String(o.fulfilled||'').slice(0,16).replace('T',' '))+
+          h+='<div class="doneline">Dispatched '+esc(ldt(o.fulfilled))+
             (o.tracking?' &middot; '+esc(carrierLabel(o.carrier))+' '+esc(o.tracking):'')+
             (n.dispatched?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
             '<div class="row" style="margin-top:10px">'+
@@ -763,7 +777,7 @@ function render(){
         h+='<div class="doneline" style="margin-top:12px">'+
            (o.refund.kind==='cancel'?'Cancelled and refunded ':'Refunded ')+
            money(o.refund.amount)+' &middot; '+
-           esc(String(o.refund.at||'').slice(0,16).replace('T',' '))+'</div>'+
+           esc(ldt(o.refund.at))+'</div>'+
            '<div class="hint">'+esc(o.refund.reason_label||'')+
            (o.refund.restocked?' &middot; back in stock'
                               :' &middot; not restocked ('+esc(o.refund.no_restock_label||'')+')')+
