@@ -142,6 +142,9 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
   margin-top:0;padding:0 22px;height:44px;min-height:44px;border-radius:10px;font-size:14px}
 .doneline{margin-top:12px;padding:11px 13px;border-radius:11px;background:#e9f0e6;
   font-size:13.5px;color:#2c5c2c}
+.refline{margin-top:12px;padding:13px 15px;border-radius:11px;background:#f7e2e2;
+  font-size:14px;color:#6e2320;line-height:1.6}
+.refline b{font-size:15px;letter-spacing:.2px}
 .ghost{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);
   background:#fff;color:var(--ink);padding:0 18px;border-radius:10px;font-size:14px;
   cursor:pointer;height:44px;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
@@ -722,7 +725,22 @@ function render(){
         esc((o.customer||{}).email||'')+(((o.customer||{}).phone)?'<br>'+esc(o.customer.phone):'')+
         (collect?'':'<br>'+esc((o.customer||{}).address||''))+'</div>';
 
-      if(collect){
+      // A cancelled or refunded order is CLOSED: no fulfilment banner, no
+      // buttons. Before this guard a cancelled order fell into the collected
+      // branch and showed "Collected" with a blank time plus an Undo button
+      // that the server would refuse - exactly the confusion it caused.
+      var closed=!!o.refund||o.status==='cancelled'||o.status==='refunded'
+        ||o.refund_state==='pending';
+
+      if(closed){
+        // History only, if it actually went out before the money went back.
+        if(o.fulfilled){
+          h+='<div class="doneline">'+(collect?'Was collected ':'Was dispatched ')+
+             esc(ldt(o.fulfilled))+
+             (!collect&&o.tracking?' &middot; '+esc(carrierLabel(o.carrier))+' '+esc(o.tracking):'')+
+             '</div>';
+        }
+      } else if(collect){
         if(o.status==='paid'){
           h+='<button type="button" class="fulfil" data-act="ready" data-ref="'+esc(o.reference)+'">'+
              'Ready for collection</button>'+
@@ -736,11 +754,11 @@ function render(){
             '<div class="hint">Closes the order and emails them a receipt.</div>'+
             '<div class="row" style="margin-top:10px">'+
             '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend ready email</button>'+
-            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Not ready after all - undo</button></div>';
         } else {
           h+='<div class="doneline">Collected '+esc(ldt(o.fulfilled))+'</div>'+
             '<div class="row" style="margin-top:10px">'+
-            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Not collected after all - undo</button></div>';
         }
       } else {
         if(o.status==='paid'){
@@ -760,7 +778,7 @@ function render(){
             (n.dispatched?' &middot; customer emailed':' &middot; <b>email not sent</b>')+'</div>'+
             '<div class="row" style="margin-top:10px">'+
             '<button type="button" class="ghost" data-act="resend" data-ref="'+esc(o.reference)+'">Resend email</button>'+
-            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
+            '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Not dispatched after all - undo</button></div>';
         }
       }
       // ── cancel / refund ──────────────────────────────────────────────
@@ -774,14 +792,16 @@ function render(){
       var open=(REFUND_FOR===o.reference);
 
       if(o.refund){
-        h+='<div class="doneline" style="margin-top:12px">'+
-           (o.refund.kind==='cancel'?'Cancelled and refunded ':'Refunded ')+
-           money(o.refund.amount)+' &middot; '+
-           esc(ldt(o.refund.at))+'</div>'+
-           '<div class="hint">'+esc(o.refund.reason_label||'')+
-           (o.refund.restocked?' &middot; back in stock'
-                              :' &middot; not restocked ('+esc(o.refund.no_restock_label||'')+')')+
-           (o.refund.note?' &middot; '+esc(o.refund.note):'')+'</div>';
+        var wasCancel=(o.refund.kind==='cancel');
+        h+='<div class="refline"><b>'+(wasCancel?'ORDER CANCELLED':'ORDER REFUNDED')+
+           '</b> &middot; '+money(o.refund.amount)+' sent back to the customer &middot; '+
+           esc(ldt(o.refund.at))+'<br>'+
+           'Reason: '+esc(o.refund.reason_label||'not recorded')+
+           (o.refund.note?' &middot; '+esc(o.refund.note):'')+'<br>'+
+           'Stock: '+(o.refund.restocked
+             ?'back on the shelf'
+             :'<b>not restocked</b> &middot; '+esc(o.refund.no_restock_label||''))+
+           '</div>';
       } else if(o.refund_state==='pending'){
         h+='<div class="doneline" style="margin-top:12px">Submitted, waiting on Teya</div>'+
            '<div class="hint">Teya accepted it but has not confirmed. Nothing has been '+
