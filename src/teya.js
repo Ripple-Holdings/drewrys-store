@@ -923,62 +923,77 @@ export async function tokenDiagnostic(env, scope = SCOPE_REFUND, sample = {}) {
 
 
 /**
- * Is /v3/refunds a path this gateway knows about?
+ * Which refunds path is actually live on this gateway?
  *
- * A bare 403 with no body is the same signature we hit during the OAuth work,
- * where it turned out to be the gateway refusing an UNKNOWN PATH rather than
- * the server refusing a credential. This settles which it is without creating
- * a refund, by comparing three GETs with the same refunds/create token:
+ * v2 of this probe. v1 used GET, and its verdict had a hole: a bog-standard
+ * nginx `limit_except POST { deny all; }` returns the same bare 403 page on a
+ * GET to a LIVE location as the default deny returns for a path that does not
+ * exist. So "identical to nonsense" proved only that nginx refuses GET there,
+ * not that the path is dead. The 11/08 GET run is therefore inconclusive on
+ * /v3/refunds and /v2/refunds.
  *
- *   a path we KNOW exists   /v2/checkout/sessions
- *   the path in question    /v3/refunds
- *   a path that cannot      /v3/definitely-not-a-real-path-xyz
+ * This version POSTs an EMPTY JSON body `{}` — the method the real call uses.
+ * No transaction_id means nothing can ever be refunded or created; a live
+ * route answers with a JSON validation or auth error from Kong or the service,
+ * a dead one answers with the same nginx HTML as the nonsense control.
  *
- * GET creates nothing. A path that exists but does not accept GET answers 405,
- * which is itself the proof that the path is there.
+ * Candidates, in order of evidence:
+ *   /v2/refunds   the production service link declared by Teya's own
+ *                 WooCommerce plugin, which provably refunds money
+ *   /v3/refunds   the path in the beta OpenAPI spec (which names NO host)
+ *   nonsense      the dead-path control
+ *   /v2/checkout/sessions with `{}` and the refund scope — the gateway
+ *                 control; any JSON answer proves the request reached Kong
  */
 export async function pathProbe(env) {
   const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
   const paths = [
-    ['known good', '/v2/checkout/sessions'],
+    ['plugin production URL', '/v2/refunds'],
     ['the one we use', '/v3/refunds'],
     ['deliberate nonsense', '/v3/definitely-not-a-real-path-xyz'],
-    ['refunds without a version', '/refunds'],
-    ['v2 refunds', '/v2/refunds'],
+    ['gateway control', '/v2/checkout/sessions'],
   ];
-  const out = { base, scope_used: SCOPE_REFUND, results: [] };
+  const out = { base, method: 'POST', body_sent: '{}', scope_used: SCOPE_REFUND,
+                results: [] };
 
   for (const [label, path] of paths) {
     let entry = { label, path, status: null, body: '', note: '' };
     try {
       const res = await fetch(`${base}${path}`, {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': await authHeader(env, false, SCOPE_REFUND),
           'Content-Type': 'application/json',
+          // Deterministic and unique to the probe. A request with no
+          // transaction_id fails validation and stores nothing anyway.
+          'Idempotency-Key': 'path-probe-empty-body',
         },
+        body: '{}',
       });
       entry.status = res.status;
       const txt = await res.text().catch(() => '');
-      entry.body = txt ? txt.slice(0, 200) : '(empty)';
-      entry.note = res.status === 405
-        ? 'the path EXISTS, it just does not take GET'
-        : (res.status === 404 ? 'gateway does not know this path'
-          : (res.status === 403 && !txt ? 'bare 403, no body'
-            : (res.status === 401 ? 'path exists, credential rejected' : '')));
+      entry.body = txt ? txt.slice(0, 300) : '(empty)';
+      const isHtml = /<html/i.test(txt);
+      entry.note = isHtml
+        ? 'nginx HTML page — never reached the API'
+        : (txt ? 'JSON/text from the API — this route is LIVE, read the body'
+               : 'empty body, status alone');
     } catch (e) {
       entry.note = 'threw: ' + String(e && e.message || e);
     }
     out.results.push(entry);
   }
 
-  const known = out.results[0];
-  const ours = out.results[1];
-  const nonsense = out.results[2];
-  out.verdict = (ours.status === nonsense.status && ours.body === nonsense.body)
-    ? 'OUR PATH LOOKS THE SAME AS A PATH THAT DOES NOT EXIST. /v3/refunds is very likely the wrong URL.'
-    : (ours.status === 405
-      ? 'the path exists and takes a different method, so the URL is right and the 403 on POST is about permission or payload'
-      : 'inconclusive from the shape alone, read the three rows');
+  const v2 = out.results[0];
+  const v3 = out.results[1];
+  const live = (r) => r.body && !/<html/i.test(r.body);
+  out.verdict =
+    live(v2) && !live(v3)
+      ? 'POST /v2/refunds reaches the API and /v3/refunds does not. The fix is the path constant in refundPayment.'
+    : live(v3) && !live(v2)
+      ? '/v3/refunds is live after all — the 403 on the real call is about the request, not the route. Read its body.'
+    : live(v2) && live(v3)
+      ? 'both answer JSON — compare the two bodies to pick the right one'
+      : 'neither refunds path reaches the API on this host even by POST. It is a host problem — wait for Teya.';
   return out;
 }
