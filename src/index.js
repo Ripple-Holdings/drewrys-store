@@ -30,6 +30,7 @@ import { TERMS, RETURNS, PRIVACY } from './legal.js';
 import { orderConfirmationPage } from './confirmation.js';
 import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail,
          cancelledEmail } from './refunds.js';
+import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
@@ -73,6 +74,20 @@ async function renderSite(request, env) {
     reviews: publishedReviews(allReviews),
     ratings: ratingSummary(allReviews),
     payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
+    // Footer links. Empty means the link is hidden rather than pointing at "#",
+    // which is what sent every one of them back to the top of the page.
+    // A hand-picked review for the contact panel. Blank means the panel falls
+    // back to a real published review, and shows nothing if there are none.
+    featured_review: {
+      quote: settings.feature_quote || '',
+      name: settings.feature_name || '',
+      sub: settings.feature_sub || '',
+    },
+    links: {
+      instagram: settings.instagram_url || '',
+      facebook: settings.facebook_url || '',
+      contact: settings.contact_email || env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL || '',
+    },
     address_lookup: !!env.ADDRESS_API_KEY,
   };
 
@@ -147,10 +162,10 @@ function toPlainText(markup) {
     .join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-async function sendEmail(env, { to, subject, html: bodyHtml }) {
+async function sendEmail(env, { to, subject, html: bodyHtml, replyTo: replyOverride }) {
   if (!env.SENDGRID_API_KEY || !to) return false;
   const from = env.SHOP_FROM_EMAIL || 'orders@drewrys.store';
-  const replyTo = env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL || '';
+  const replyTo = replyOverride || env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL || '';
   const r = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
@@ -947,6 +962,14 @@ async function handleAdmin(request, env, url, ctx) {
         review_ask_from: Math.max(0, Math.min(5, parseInt(st.review_ask_from, 10) || 0)),
         review_google_url: String(st.review_google_url || '').slice(0, 400),
         review_facebook_url: String(st.review_facebook_url || '').slice(0, 400),
+        // Footer links. Anything left empty hides its link rather than
+        // rendering a dead "#" that jumps to the top of the page.
+        instagram_url: String(st.instagram_url || '').slice(0, 400),
+        facebook_url: String(st.facebook_url || '').slice(0, 400),
+        contact_email: String(st.contact_email || '').slice(0, 200),
+        feature_quote: String(st.feature_quote || '').slice(0, 400),
+        feature_name: String(st.feature_name || '').slice(0, 80),
+        feature_sub: String(st.feature_sub || '').slice(0, 80),
         review_auto_publish: st.review_auto_publish === true,
         promos: (Array.isArray(st.promos) ? st.promos : normalisePromos({ promos: st.promos }))
           .map(cleanPromo).filter(Boolean).slice(0, 100),
@@ -969,6 +992,7 @@ async function handleAdmin(request, env, url, ctx) {
     carriers: CARRIERS,
     return_reasons: RETURN_REASONS,
     no_restock_reasons: NO_RESTOCK_REASONS,
+    leads: await listLeads(env),
     reviews: await getReviews(env),
     platforms: livePlatforms(adminSettings),
     promo_uses: await getPromoUses(env),
@@ -1009,6 +1033,14 @@ export default {
         return json({ ...cat, stock: await stockMap(env, cat.products) });
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
+      if (path === '/api/subscribe' && request.method === 'POST') return subscribe(request, env);
+      if (path === '/api/enquiry' && request.method === 'POST') {
+        return enquiry(request, env, ctx, sendEmail);
+      }
+      if (path === '/api/contact' && request.method === 'POST') {
+        return contact(request, env, ctx, sendEmail);
+      }
+      if (path === '/unsubscribe') return unsubscribe(request, env, url);
       // Accept every path Teya might have been pointed at. A mismatch used to
       // 404 into the asset handler and leave no trace at all.
       if (/^\/(webhook|teya-webhook|webhooks\/teya|teya\/webhook)$/.test(path)) {

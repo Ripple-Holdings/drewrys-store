@@ -246,6 +246,7 @@ ${DASH_CSS}
   <button data-tab="discounts" aria-selected="false">Discounts</button>
   <button data-tab="orders" aria-selected="false">Orders</button>
   <button data-tab="reviews" aria-selected="false">Reviews</button>
+  <button data-tab="leads" aria-selected="false">Signups</button>
 </nav>
 <main id="main"></main>
 <div class="savebar" id="savebar" hidden><span class="sp" id="dirty"></span>
@@ -723,6 +724,64 @@ function render(){
     });
   }
 
+  if(tab==='leads'){
+    var LD=S.leads||{subscribers:[],enquiries:[]};
+
+    // .card open / .head / .hmeta / .body is the admin's own panel shape.
+    // .panel and .bars are not classes in this stylesheet.
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Footer links</b><span>Blank hides the link. '+
+      'All three used to point at a hash and jump to the top of the page</span></div></div>'+
+      '<div class="body">'+
+        '<div><label>Instagram URL</label>'+
+          '<input data-set="instagram_url" value="'+esc(S.settings.instagram_url||'')+'" '+
+          'placeholder="https://instagram.com/yourpage"></div>'+
+        '<div><label>Facebook URL</label>'+
+          '<input data-set="facebook_url" value="'+esc(S.settings.facebook_url||'')+'" '+
+          'placeholder="https://facebook.com/yourpage"></div>'+
+        '<div><label>Contact email</label>'+
+          '<input data-set="contact_email" value="'+esc(S.settings.contact_email||'')+'" '+
+          'placeholder="hello@drewrys.store"></div>'+
+        '<div class="hint">The Contact link opens a mail app addressed here.</div>'+
+      '</div></div>';
+
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Review on the contact panel</b>'+
+      '<span>Shown beside the contact form. Leave blank and it uses a published '+
+      'review instead, or shows nothing</span></div></div><div class="body">'+
+      '<div><label>Quote</label>'+
+        '<input data-set="feature_quote" value="'+esc(S.settings.feature_quote||'')+'" '+
+        'placeholder="What they said about the product"></div>'+
+      '<div class="two">'+
+        '<div><label>Name</label>'+
+          '<input data-set="feature_name" value="'+esc(S.settings.feature_name||'')+'" '+
+          'placeholder="Their name"></div>'+
+        '<div><label>Under the name</label>'+
+          '<input data-set="feature_sub" value="'+esc(S.settings.feature_sub||'')+'" '+
+          'placeholder="Sea Salt Spray"></div>'+
+      '</div>'+
+      '<div class="hint">Use something a real customer actually said, with their '+
+      'permission. It renders with five stars and their name against it.</div>'+
+      '</div></div>';
+
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Newsletter</b><span>'+LD.subscribers.length+' '+
+      (LD.subscribers.length===1?'signup from the footer':'signups from the footer')+
+      '</span></div>'+
+      (LD.subscribers.length?'<button type="button" class="ghost" data-csv="subs">Download CSV</button>':'')+
+      '</div><div class="body">';
+    if(!LD.subscribers.length){
+      h+='<div class="note">Nobody yet. The footer form writes here the moment someone signs up.</div>';
+    } else {
+      h+='<table><tr><th>Email</th><th>Signed up</th></tr>'+
+        LD.subscribers.map(function(x){
+          return '<tr><td>'+esc(x.email)+'</td><td>'+
+            esc(String(x.at||'').slice(0,10))+'</td></tr>';}).join('')+'</table>';
+    }
+    h+='</div></div>';
+
+  }
+
   if(tab==='reviews'){
     var revs=S.reviews||[];
     var pend=revs.filter(function(r){return r.status==='pending';});
@@ -818,7 +877,7 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
-    '[data-rtog],[data-rgo],'+
+    '[data-rtog],[data-rgo],[data-csv],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
 
@@ -834,6 +893,23 @@ document.addEventListener('click',function(e){
     render(); refreshBar(); return; }
 
   if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; if(t.dataset.oview==='pay') DIAG=null; render(); return; }
+
+  if(t.dataset.csv!==undefined){
+    var LD=S.leads||{subscribers:[],enquiries:[]};
+    var rows, name;
+    if(t.dataset.csv==='subs'){
+      name='drewrys-newsletter.csv';
+      rows=[['email','signed up']].concat(LD.subscribers.map(function(x){return [x.email,x.at];}));
+    } else { return; }
+    }
+    var q=String.fromCharCode(34), CRLF=String.fromCharCode(13,10), BOM=String.fromCharCode(65279);
+    var csv=rows.map(function(r){return r.map(function(c){
+      return q+String(c==null?'':c).split(q).join(q+q)+q;}).join(',');}).join(CRLF);
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([BOM+csv],{type:'text/csv;charset=utf-8'}));
+    a.download=name; a.click(); URL.revokeObjectURL(a.href);
+    return;
+  }
 
   if(t.dataset.rtog!==undefined){
     REFUND_FOR = (REFUND_FOR===t.dataset.rtog) ? null : t.dataset.rtog;

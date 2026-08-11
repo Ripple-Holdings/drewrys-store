@@ -198,6 +198,10 @@ async function teyaFetch(env, path, init = {}, scope = SCOPE_CHECKOUT) {
 }
 
 export const DEFAULT_SETTINGS = {
+  // Ben has no Facebook page, so it stays blank and the link hides itself.
+  instagram_url: 'https://www.instagram.com/drewrys_haircare/',
+  facebook_url: '',
+  contact_email: 'hello@drewrys.store',
   zones: DEFAULT_ZONES,
   shipping_methods: DEFAULT_METHODS,
   free_over: {},                    // zone id -> pence, absent or 0 = no threshold

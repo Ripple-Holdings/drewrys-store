@@ -128,8 +128,8 @@ published when you place it.</p>
 <h2>2. Placing an order</h2>
 <p>Adding items to your bag is not an order. Your order is placed when you
 complete payment, and a contract is formed when we send you an order
-confirmation email. If we cannot fulfil your order &mdash; because an item is
-out of stock, priced in error, or we cannot take payment &mdash; we will tell
+confirmation email. If we cannot fulfil your order &ndash; because an item is
+out of stock, priced in error, or we cannot take payment &ndash; we will tell
 you and refund anything you have paid in full.</p>
 <p>We do not require an account. Your bag is held in your browser only and is
 not saved to our systems until you check out.</p>
@@ -166,7 +166,7 @@ arrival. That is payable by you and is not included in the price.</p>
 
 <h2>5. Faulty or incorrect goods</h2>
 <p>If something arrives damaged, faulty or not what you ordered, tell us within
-a reasonable time and we will put it right &mdash; a replacement or a full
+a reasonable time and we will put it right &ndash; a replacement or a full
 refund, including the delivery you paid and the cost of returning it. Your
 statutory rights under consumer law are not affected by anything in these
 terms.</p>
@@ -219,7 +219,7 @@ export const RETURNS = page('Returns &amp; Cancellations',
 <p>Because you bought without meeting us face to face, you may cancel your
 order within <strong>14 days</strong> of the day you (or someone you nominate)
 receive the goods. You do not need to give a reason.</p>
-<p>To cancel, just tell us clearly &mdash; email
+<p>To cancel, just tell us clearly &ndash; email
 <a href="mailto:${BUSINESS.email}">${BUSINESS.email}</a> with your order
 reference. A phone call or a letter is fine too. You can use the form at the
 bottom of this page but you do not have to.</p>
@@ -229,9 +229,9 @@ bottom of this page but you do not have to.</p>
 suitable for return once unsealed, for health protection or hygiene reasons.
 Most of what we sell falls into that category.</p>
 <ul>
-  <li><strong>Unopened, with the seal intact</strong> &mdash; returnable within the
+  <li><strong>Unopened, with the seal intact</strong> &ndash; returnable within the
   period above.</li>
-  <li><strong>Opened or unsealed</strong> &mdash; not returnable, unless it is
+  <li><strong>Opened or unsealed</strong> &ndash; not returnable, unless it is
   faulty or was not what you ordered.</li>
 </ul>
 <p>This is not us being awkward. We cannot resell a product once it has been
@@ -244,7 +244,7 @@ opened, and neither could anyone else.</p>
 order reference so we can find you.</p>
 <p><strong>Return postage is paid by you</strong> unless the item is faulty,
 damaged or wrong, in which case we cover it. We recommend a tracked service
-&mdash; until it reaches us the parcel is your responsibility, and we can only
+&ndash; until it reaches us the parcel is your responsibility, and we can only
 refund what we actually receive.</p>
 <p>You may handle goods as you would in a shop. If they are damaged or used
 beyond that, we may reduce your refund to reflect the loss in value.</p>
@@ -269,8 +269,8 @@ This applies whether or not the item is opened, and is separate from the
 The easiest route is to bring it back to the shop.</p>
 
 <h2>Model cancellation form</h2>
-<p>You do not have to use this &mdash; an email saying you want to cancel is
-enough &mdash; but it is here if you prefer it.</p>
+<p>You do not have to use this &ndash; an email saying you want to cancel is
+enough &ndash; but it is here if you prefer it.</p>
 <div class="box">
   <p>To ${f('legal_name')}, ${f('returns_address')},
   <a href="mailto:${BUSINESS.email}">${BUSINESS.email}</a>:</p>
@@ -314,9 +314,27 @@ ${who}
 <ul>
   <li><strong>Card details.</strong> Payment happens on Teya's own checkout
   page. Your card number never touches this website or our systems.</li>
-  <li><strong>Tracking data.</strong> No analytics, no advertising pixels, no
-  profiling, no cookies. Your bag is held in your browser's memory and is gone
-  when you close the tab.</li>
+  <li><strong>Advertising and profiling data.</strong> No advertising pixels,
+  no profiling, no cookies, and nothing shared with ad networks.</li>
+</ul>
+
+<h3>The rest of what we hold</h3>
+<ul>
+  <li><strong>Newsletter.</strong> If you type your email into the footer, we
+  store that email address and the date, and nothing else. Every email we send
+  carries a one-click unsubscribe, and you can also just reply and ask.</li>
+  <li><strong>Messages.</strong> If you use the contact or wholesale form we
+  keep your name, email and what you wrote, so we can answer you.</li>
+  <li><strong>Reviews.</strong> If you leave one we store your rating, your
+  comment and the name you give. If it is published, that name is shown.</li>
+  <li><strong>Visitor counts.</strong> We count visits so we know whether the
+  shop is working. To count you once rather than five times we make a short
+  code from your IP address and browser, which changes every day and cannot be
+  traced back to you or linked across days. We do not store your IP address, we
+  do not know who you are, and there is no cookie involved.</li>
+  <li><strong>Your bag.</strong> Kept in your own browser's storage on your
+  device so it survives a refresh. It never reaches us until you check out, and
+  clearing your browser data removes it.</li>
 </ul>
 
 <h2>Why we use it, and our lawful basis</h2>
@@ -326,6 +344,10 @@ ${who}
   <tr><td>Emailing your confirmation and any updates</td><td>Performance of our contract with you</td></tr>
   <tr><td>Handling returns, refunds and complaints</td><td>Contract, and our legal obligations</td></tr>
   <tr><td>Keeping accounting and tax records</td><td>Legal obligation</td></tr>
+  <tr><td>Sending you the newsletter</td><td>Your consent, withdrawable at any time</td></tr>
+  <tr><td>Answering a message you send us</td><td>Our legitimate interest in replying to you</td></tr>
+  <tr><td>Publishing a review you chose to leave</td><td>Your consent</td></tr>
+  <tr><td>Counting visits to the shop</td><td>Our legitimate interest in knowing the site works, using data that cannot identify you</td></tr>
   <tr><td>Replying to a wholesale enquiry</td><td>Our legitimate interest in responding to you</td></tr>
   <tr><td>Marketing emails, if you sign up</td><td>Your consent, withdrawable at any time</td></tr>
 </table>
@@ -333,12 +355,12 @@ ${who}
 <h2>Who else handles it</h2>
 <p>We use a small number of service providers, each only for what is listed:</p>
 <ul>
-  <li><strong>Teya</strong> &mdash; takes the payment and tells us whether it
+  <li><strong>Teya</strong> &ndash; takes the payment and tells us whether it
   succeeded.</li>
-  <li><strong>Cloudflare</strong> &mdash; hosts the site and stores order
+  <li><strong>Cloudflare</strong> &ndash; hosts the site and stores order
   records.</li>
-  <li><strong>SendGrid (Twilio)</strong> &mdash; sends your confirmation email.</li>
-  <li><strong>Our delivery carriers</strong> &mdash; receive the name and
+  <li><strong>SendGrid (Twilio)</strong> &ndash; sends your confirmation email.</li>
+  <li><strong>Our delivery carriers</strong> &ndash; receive the name and
   address needed to deliver your parcel.</li>
 </ul>
 <p>Some of these operate outside the Isle of Man. Where information is
@@ -348,12 +370,21 @@ share it for anyone else's marketing.</p>
 
 <h2>How long we keep it</h2>
 <ul>
-  <li><strong>Order records</strong> &mdash; six years after the end of the
+  <li><strong>Order records</strong> &ndash; six years after the end of the
   relevant tax year, because tax and accounting law requires it.</li>
-  <li><strong>Checkouts that were started but never paid</strong> &mdash;
+  <li><strong>Checkouts that were started but never paid</strong> &ndash;
   automatically deleted after 90 days.</li>
-  <li><strong>Wholesale enquiries</strong> &mdash; up to two years, then deleted.</li>
-  <li><strong>Marketing sign-ups</strong> &mdash; until you unsubscribe.</li>
+  <li><strong>Wholesale enquiries</strong> &ndash; up to two years, then deleted.</li>
+  <li><strong>Marketing sign-ups</strong> &ndash; until you unsubscribe, and we
+  delete the record straight away when you do.</li>
+  <li><strong>Messages from the contact form</strong> &ndash; up to two years,
+  then deleted.</li>
+  <li><strong>Reviews</strong> &ndash; for as long as they are published. Ask
+  and we will remove yours.</li>
+  <li><strong>Visitor counts</strong> &ndash; the raw daily codes are deleted
+  after seven days. What remains is a total per day with nothing in it that
+  points at a person, kept for 13 months so we can compare one year to the
+  next.</li>
 </ul>
 
 <h2>Your rights</h2>
