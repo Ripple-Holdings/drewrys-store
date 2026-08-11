@@ -14,7 +14,7 @@
 
 import {
   createSession, verifySignature, getCatalogue, getSettings, getStock,
-  getIngredients, getSessionStatus, DEFAULT_SETTINGS,
+  getIngredients, getSessionStatus, refundPayment, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
 import { zones, methods } from './shipping.js';
@@ -28,6 +28,8 @@ import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
 import { orderConfirmationPage } from './confirmation.js';
+import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail,
+         cancelledEmail } from './refunds.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
 
@@ -108,6 +110,16 @@ async function pushRecent(env, reference) {
   try { list = raw ? JSON.parse(raw) : []; } catch { list = []; }
   list = [reference, ...list.filter((r) => r !== reference)].slice(0, 50);
   await env.DREWRYS_KV.put('orders:recent', JSON.stringify(list));
+}
+
+/** Put a refunded order's units back on the shelf. The mirror of
+ *  decrementStock: products with no stock key are unlimited and left alone. */
+async function restoreStock(env, order) {
+  for (const item of order.items || []) {
+    const cur = await getStock(env, item.sku);
+    if (cur === null) continue;
+    await env.DREWRYS_KV.put(`stock:${item.sku}`, String(cur + (item.quantity || 0)));
+  }
 }
 
 async function decrementStock(env, order) {
@@ -637,7 +649,7 @@ async function recentOrders(env) {
  */
 const STAGE_EMAIL = { ready: 'ready', collected: 'collected', dispatched: 'dispatched' };
 
-async function fulfilOrder(env, body) {
+async function fulfilOrder(env, body, ctx) {
   const ref = String(body.reference || '').slice(0, 40);
   if (!ref) return json({ error: 'no reference' }, 400);
 
@@ -667,6 +679,91 @@ async function fulfilOrder(env, body) {
     order.tracking = String(body.tracking || '').trim().slice(0, 60);
     order.status = 'dispatched';
     order.fulfilled = new Date().toISOString();
+  } else if (action === 'refund' || action === 'cancel') {
+    // Same money movement, two different situations, so two different emails.
+    //   cancel  the order has NOT gone out yet. It is stopped and refunded.
+    //   refund  it has already been collected or dispatched, and is coming back.
+    const cancelling = action === 'cancel';
+    const gone = order.status === 'collected' || order.status === 'dispatched';
+
+    if (order.status === 'pending' || order.status === 'failed') {
+      return json({ error: 'that order was never paid' }, 400);
+    }
+    if (cancelling && gone) {
+      return json({ error: 'that order has already gone out, refund it instead' }, 400);
+    }
+    if (!cancelling && !gone) {
+      return json({ error: 'that order has not gone out yet, cancel it instead' }, 400);
+    }
+    if (!order.transaction_id) {
+      return json({ error: 'no transaction id on this order, so Teya cannot be asked' }, 409);
+    }
+    if (order.status === 'refunded' || order.status === 'cancelled') {
+      return json({ error: 'the money has already been returned on this order' }, 409);
+    }
+    if (order.refund_state === 'pending') {
+      return json({ error: 'a refund is already in progress with Teya for this order' }, 409);
+    }
+
+    const reason = String(body.reason || '');
+    if (!RETURN_REASONS.some((r) => r.id === reason)) {
+      return json({ error: cancelling ? 'pick a reason for the cancellation'
+                                      : 'pick a reason for the return' }, 400);
+    }
+    // A cancelled order never left the shop, so its stock always goes back and
+    // there is nothing to ask. Only a return can come back unsellable.
+    const restock = cancelling ? true : body.restock === true;
+    const noRestockReason = restock ? '' : String(body.no_restock_reason || '');
+    if (!restock && !NO_RESTOCK_REASONS.some((r) => r.id === noRestockReason)) {
+      return json({ error: 'say why it cannot go back on the shelf' }, 400);
+    }
+
+    // FULL only, and the amount comes from the ORDER, never the browser.
+    const amount = order.total || 0;
+    const res = await refundPayment(env, {
+      transactionId: order.transaction_id, amount, reference: ref,
+    });
+
+    // A 202 or PENDING is NOT done. Park it and tell the truth.
+    if (res.pending) {
+      order.refund_state = 'pending';
+      order.refund_attempted = new Date().toISOString();
+      await env.DREWRYS_KV.put(`order:${ref}`, JSON.stringify(order),
+        { expirationTtl: 60 * 60 * 24 * 365 * 7 });
+      return json({ error: res.error, pending: true, order }, 202);
+    }
+    if (!res.ok) return json({ error: res.error || 'the refund was declined' }, 502);
+
+    order.refund = {
+      at: new Date().toISOString(), amount, kind: cancelling ? 'cancel' : 'refund',
+      reason, reason_label: reasonLabel(RETURN_REASONS, reason),
+      note: String(body.note || '').slice(0, 300),
+      restocked: restock,
+      no_restock_reason: noRestockReason,
+      no_restock_label: restock ? '' : reasonLabel(NO_RESTOCK_REASONS, noRestockReason),
+      refund_id: res.refund_id, approval_code: res.approval_code,
+      response_code: res.response_code || '',
+      teya_created_at: res.created_at || '',
+      amount_settled: res.amount_settled === null || res.amount_settled === undefined
+        ? amount : res.amount_settled,
+    };
+    order.refund_state = 'refunded';
+    order.status = cancelling ? 'cancelled' : 'refunded';
+
+    if (restock) ctx.waitUntil(restoreStock(env, order));
+
+    if (order.customer?.email) {
+      const build = cancelling ? cancelledEmail : refundEmail;
+      ctx.waitUntil(sendEmail(env, {
+        to: order.customer.email,
+        subject: cancelling ? `Your Drewrys order ${ref} has been cancelled`
+                            : `Your Drewrys refund for order ${ref}`,
+        html: build(order, {
+          origin: env.SITE_ORIGIN, amount,
+          contactEmail: env.SHOP_CONTACT_EMAIL || env.SHOP_ORDER_EMAIL,
+        }),
+      }));
+    }
   } else if (action !== 'resend') {
     return json({ error: 'that action does not apply to this order' }, 400);
   }
@@ -734,7 +831,7 @@ async function serveImage(env, slug) {
   });
 }
 
-async function handleAdmin(request, env, url) {
+async function handleAdmin(request, env, url, ctx) {
   const key = url.searchParams.get('key') || request.headers.get('x-admin-key') || '';
   if (!env.ADMIN_KEY || key !== env.ADMIN_KEY) {
     if (request.method === 'POST') return json({ error: 'Unauthorized' }, 401);
@@ -757,7 +854,7 @@ async function handleAdmin(request, env, url) {
     if (!body) return json({ error: 'bad json' }, 400);
 
     // order actions are immediate, not part of the save-draft flow
-    if (body.order) return fulfilOrder(env, body.order);
+    if (body.order) return fulfilOrder(env, body.order, ctx);
     if (body.review) return moderateReview(env, body.review);
 
     // Photos first, so the catalogue can be written with their final URLs.
@@ -870,6 +967,8 @@ async function handleAdmin(request, env, url) {
     orders: await recentOrders(env),
     ingredients: await getIngredients(env),
     carriers: CARRIERS,
+    return_reasons: RETURN_REASONS,
+    no_restock_reasons: NO_RESTOCK_REASONS,
     reviews: await getReviews(env),
     platforms: livePlatforms(adminSettings),
     promo_uses: await getPromoUses(env),
@@ -930,7 +1029,7 @@ export default {
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);
       if (path === '/privacy') return html(PRIVACY);
-      if (path === '/admin') return handleAdmin(request, env, url);
+      if (path === '/admin') return handleAdmin(request, env, url, ctx);
       if (path.startsWith('/media/')) return serveImage(env, decodeURIComponent(path.slice(7).split('?')[0]));
       if (env.ASSETS) return env.ASSETS.fetch(request);
       return new Response('Not found', { status: 404 });

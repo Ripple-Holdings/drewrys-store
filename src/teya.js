@@ -39,8 +39,12 @@ const API = {
 
 // Cached per isolate. Workers reuse an isolate across requests, so this saves a
 // token round trip on most calls without ever persisting a credential.
-let _token = null;          // { value, expires }
-let _tokenInFlight = null;  // single-flight guard
+// Keyed `${env}|${scope}` — Teya grants scopes per token, so one cache slot
+// would hand a checkout token to a refund and 403.
+export const SCOPE_CHECKOUT = 'checkout/sessions/create';
+export const SCOPE_REFUND = 'refunds/create';
+const _tokens = {};          // { 'production|scope': { value, expires } }
+const _tokenInFlight = {};   // single-flight guard, per key
 
 /**
  * Candidate token endpoints, tried in order until one answers with a token.
@@ -88,14 +92,18 @@ function tokenUrl(env) {
  * can be revoked before its stated TTL by a key rotation or clock skew, and the
  * expiry alone will not tell you.
  */
-async function getAccessToken(env, force = false) {
+async function getAccessToken(env, force = false, scope = SCOPE_CHECKOUT) {
+  // Teya grant scopes PER TOKEN. A refund needs refunds/create, and a token
+  // minted for checkout/sessions/create returns 403 "token has no scopes
+  // defined" on /v3/refunds. Cache and single-flight per env AND scope, or a
+  // warm isolate hands a checkout token to a refund.
+  const ck = `${envKey(env)}|${scope}`;
   const now = Date.now();
-  if (!force && _token && _token.expires > now + 30000) return _token.value;
+  const hit = _tokens[ck];
+  if (!force && hit && hit.expires > now + 30000) return hit.value;
+  if (!force && _tokenInFlight[ck]) return _tokenInFlight[ck];
 
-  // Collapse concurrent callers onto one exchange.
-  if (!force && _tokenInFlight) return _tokenInFlight;
-
-  _tokenInFlight = (async () => {
+  _tokenInFlight[ck] = (async () => {
     // OAuth allows the client credentials either in the form body or as HTTP
     // Basic, and servers differ on which they accept. Try the body first, then
     // Basic on a 401 or 403, rather than making the choice a guess.
@@ -104,7 +112,7 @@ async function getAccessToken(env, force = false) {
     // defined". Defaulted so no environment variable is needed; TEYA_SCOPE
     // overrides it if more scopes are ever required.
     const form = new URLSearchParams({ grant_type: 'client_credentials' });
-    form.set('scope', env.TEYA_SCOPE || 'checkout/sessions/create');
+    form.set('scope', scope);
 
     const attempt = async (url, useBasic) => {
       const body = new URLSearchParams(form);
@@ -145,12 +153,12 @@ async function getAccessToken(env, force = false) {
       console.log('teya token endpoint resolved:', winner, 'env', envKey(env));
     }
     const ttl = (parseInt(data.expires_in, 10) || 3600) * 1000;
-    _token = { value: data.access_token, expires: Date.now() + ttl };
-    return _token.value;
+    _tokens[ck] = { value: data.access_token, expires: Date.now() + ttl };
+    return _tokens[ck].value;
   })();
 
-  try { return await _tokenInFlight; }
-  finally { _tokenInFlight = null; }
+  try { return await _tokenInFlight[ck]; }
+  finally { delete _tokenInFlight[ck]; }
 }
 
 /**
@@ -158,9 +166,9 @@ async function getAccessToken(env, force = false) {
  * static bearer when only TEYA_API_KEY is set, so whichever credential shape
  * the portal issues, one of the two paths works.
  */
-async function authHeader(env, force = false) {
+async function authHeader(env, force = false, scope = SCOPE_CHECKOUT) {
   if (env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) {
-    return `Bearer ${await getAccessToken(env, force)}`;
+    return `Bearer ${await getAccessToken(env, force, scope)}`;
   }
   return `Bearer ${env.TEYA_API_KEY}`;
 }
@@ -171,13 +179,13 @@ function paymentsConfigured(env) {
 }
 
 /** Call the Teya API, retrying once on a 401 with a freshly minted token. */
-async function teyaFetch(env, path, init = {}) {
+async function teyaFetch(env, path, init = {}, scope = SCOPE_CHECKOUT) {
   const base = API[env.TEYA_ENV === 'production' ? 'production' : 'staging'];
   const send = async (force) => fetch(`${base}${path}`, {
     ...init,
     headers: {
       ...(init.headers || {}),
-      'Authorization': await authHeader(env, force),
+      'Authorization': await authHeader(env, force, scope),
       'Content-Type': 'application/json',
     },
   });
@@ -674,3 +682,110 @@ function pemToDer(text) {
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status, headers: { 'Content-Type': 'application/json' },
 });
+
+
+/**
+ * Refund a captured payment, whole or part.
+ *
+ * POST /v2/refunds, the third endpoint listed alongside checkout sessions in
+ * Teya's own WooCommerce plugin. Amount is in MINOR units, same as everywhere
+ * else on this API — the webhook's amount.value of 5 was five pence.
+ *
+ * Returns { ok, refund_id, status, error }. Never throws: a refund that fails
+ * at Teya must still leave the admin usable and the order untouched, because
+ * the one thing worse than an unrefunded order is an order marked refunded
+ * that never was.
+ */
+export async function refundPayment(env, { transactionId, amount, reference }) {
+  if (!transactionId) return { ok: false, error: 'no transaction id on this order' };
+  if (!(amount > 0)) return { ok: false, error: 'refund amount must be more than zero' };
+
+  const body = {
+    transaction_id: transactionId,
+    amount: Math.round(amount),
+    merchant_reference: reference || undefined,
+  };
+
+  let res;
+  try {
+    res = await teyaFetch(env, '/v3/refunds', {
+      method: 'POST',
+      // DETERMINISTIC, per Teya's own warning: repeating the request with a
+      // different key, or none, creates a SECOND refund. Never randomise this.
+      headers: { 'Idempotency-Key': `refund-${reference || transactionId}` },
+      body: JSON.stringify(body),
+    }, SCOPE_REFUND);
+  } catch (e) {
+    console.error('teya refund threw', String(e && e.message || e));
+    return { ok: false, error: 'could not reach Teya' };
+  }
+
+  // A 202 means accepted, NOT done, and carries no body. Treating it as success
+  // would tell Ben and the customer the money had gone back when it had not.
+  if (res.status === 202) {
+    console.log('teya refund accepted but pending', reference);
+    return { ok: false, pending: true, state: 'pending',
+             error: 'Teya has accepted the refund but has not completed it yet' };
+  }
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const known = { 401: 'Teya rejected our credentials',
+      403: 'this credential is not allowed to issue refunds - the profile needs the refunds/create scope',
+      404: 'Teya does not recognise that transaction',
+      409: 'a refund for this order has already been submitted',
+      422: 'Teya refused the amount' };
+    console.error('teya refund failed', res.status, JSON.stringify(data));
+    return { ok: false, error: data.status_reason || known[res.status] ||
+             data.message || `Teya returned ${res.status}` };
+  }
+
+  const status = String(data.status || '').toUpperCase();
+  const issuer = data.issuer_result || {};
+
+  if (status === 'FAILURE') {
+    // status_reason is a documented enum. Ben should not be shown
+    // INSUFFICIENT_FUNDS in caps and left to work out whose funds.
+    const reason = String(data.status_reason || '');
+    const plain = {
+      INSUFFICIENT_FUNDS: 'the account this would refund to has insufficient funds',
+      CARD_EXPIRED: 'the original card has expired',
+      LOST_OR_STOLEN: 'the original card is reported lost or stolen',
+      CARD_DECLINED: 'the card issuer declined the refund',
+      ISSUER_DECLINED: 'the card issuer declined the refund',
+      DO_NOT_HONOR: 'the card issuer declined the refund without a reason',
+      INVALID_CARD_NUMBER: 'the original card number is no longer valid',
+      ACCOUNT_INVALID: 'the account behind the original card is no longer valid',
+      TRANSACTION_NOT_ALLOWED: 'the issuer does not allow a refund on this transaction',
+      EXCEEDS_AMOUNT_LIMIT: 'the amount exceeds a limit on the account',
+      MERCHANT_CONFIGURATION: 'a setting on the Teya account is blocking this - contact them',
+      PROCESSOR_UNAVAILABLE: 'Teya could not reach the card network, try again shortly',
+      TEMPORARY_ISSUE_RETRY: 'a temporary problem at the card network, try again shortly',
+      TIMEOUT: 'the card network timed out, try again shortly',
+      SUSPECTED_FRAUD: 'the issuer flagged this as suspected fraud',
+    }[reason];
+    console.error('teya refund FAILURE', reason, JSON.stringify(issuer));
+    return { ok: false,
+             error: plain ? `Refund declined: ${plain}`
+                          : `Refund declined by Teya${reason ? ` (${reason})` : ''}`,
+             status_reason: reason, response_code: issuer.response_code || '' };
+  }
+
+  if (status === 'PENDING') {
+    return { ok: false, pending: true, state: 'pending',
+             error: 'Teya has the refund in progress but has not completed it' };
+  }
+
+  // Record what TEYA says was refunded, not what we asked for. If those ever
+  // differ, the money that actually moved is the one that matters.
+  const settled = data.refund_amount && Number.isFinite(Number(data.refund_amount.amount))
+    ? Number(data.refund_amount.amount) : null;
+
+  return { ok: true, state: 'refunded',
+           refund_id: data.transaction_id || '',
+           approval_code: issuer.approval_code || '',
+           response_code: issuer.response_code || '',
+           created_at: data.created_at || '',
+           amount_settled: settled,
+           status: status || 'SUCCESS' };
+}

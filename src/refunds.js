@@ -1,9 +1,11 @@
 /**
- * Refunds: the reason list, and the customer email.
+ * Refunds and cancellations: the reason lists, and the two customer emails.
  *
  * Kept in its own module rather than added to fulfilment.js so a parallel
  * session editing that file cannot collide with this one.
  */
+
+import { EMAIL_PARTS as E } from './fulfilment.js';
 
 /**
  * Why the order came back. A fixed list rather than free text so it is
@@ -44,75 +46,68 @@ const money = (p) => '£' + ((p || 0) / 100).toFixed(2);
  * than that it has arrived: card refunds settle in days, and a customer told
  * "refunded" who then sees nothing for a week emails to ask why.
  */
+/**
+ * The refund email. Built from the SAME parts as every other customer email so
+ * it looks like it came from the same shop.
+ *
+ * Deliberately says the money is on its way rather than that it has arrived:
+ * card refunds settle in days, and a customer told "refunded" who then sees
+ * nothing for a week emails to ask why.
+ */
 export function refundEmail(order, opts = {}) {
-  const contact = opts.contactEmail || '';
-  const amount = money(order.refund?.amount ?? order.total);
-  const rows = (order.items || []).map((i) => `
-      <tr>
-        <td style="padding:8px 0;color:#191C21;font-size:15px">
-          ${escapeHtml(i.name || i.sku)}${i.quantity > 1 ? ` &times; ${i.quantity}` : ''}
-        </td>
-        <td style="padding:8px 0;text-align:right;color:#191C21;font-size:15px">
-          ${money((i.unit_price || 0) * (i.quantity || 1))}
-        </td>
-      </tr>`).join('');
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const c = order.customer || {};
+  const amount = opts.amount ?? order.refund?.amount ?? order.total;
 
-  return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#F3EDE1">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-         style="background:#F3EDE1;padding:32px 16px">
-    <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-             style="max-width:560px;background:#ECE3D3;border-radius:16px;padding:32px">
-        <tr><td>
-          <p style="margin:0 0 6px;font:600 12px/1 -apple-system,Segoe UI,sans-serif;
-                    letter-spacing:.16em;text-transform:uppercase;color:#9A6C3E">
-            Refund issued
-          </p>
-          <h1 style="margin:0 0 18px;font:500 30px/1.1 Georgia,serif;color:#191C21">
-            Your refund is on its way
-          </h1>
-          <p style="margin:0 0 20px;font:400 16px/1.6 -apple-system,Segoe UI,sans-serif;color:rgba(25,28,33,.82)">
-            We have refunded <strong>${amount}</strong> for order
-            <strong>${escapeHtml(order.reference || '')}</strong>. It goes back to the
-            card you paid with. Depending on your bank it usually shows within three
-            to five working days, and sometimes a little longer.
-          </p>
-
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                 style="border-top:1px solid rgba(25,28,33,.14);margin-bottom:8px">
-            ${rows}
-          </table>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-                 style="border-top:1px solid rgba(25,28,33,.14)">
-            <tr>
-              <td style="padding:12px 0;font:600 17px/1 -apple-system,Segoe UI,sans-serif;color:#191C21">
-                Refunded
-              </td>
-              <td style="padding:12px 0;text-align:right;font:600 17px/1 -apple-system,Segoe UI,sans-serif;color:#191C21">
-                ${amount}
-              </td>
-            </tr>
-          </table>
-
-          ${contact ? `
-          <p style="margin:22px 0 0;font:400 15px/1.6 -apple-system,Segoe UI,sans-serif;color:rgba(25,28,33,.7)">
-            Any questions, reply to this email or write to
-            <a href="mailto:${escapeHtml(contact)}" style="color:#9A6C3E">${escapeHtml(contact)}</a>.
-          </p>` : ''}
-
-          <p style="margin:26px 0 0;font:400 13px/1.5 -apple-system,Segoe UI,sans-serif;color:rgba(25,28,33,.5)">
-            Drewrys &middot; ${escapeHtml(opts.shopName || 'Drewrys')}
-          </p>
-        </td></tr>
-      </table>
+  return E.shell(`
+    ${E.masthead(origin)}
+    ${E.heading('Refund issued')}
+    <tr><td style="padding:14px 28px 0;font-family:${E.SANS};font-size:15px;line-height:1.6;color:${E.INK}">
+      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', we' : 'We'} have refunded
+      <strong>${E.gbp(amount)}</strong> to the card you paid with.
     </td></tr>
-  </table>
-</body></html>`;
+    ${E.factRow('Order number', E.esc(order.reference),
+                'Refunded', E.esc(E.niceDate(order.refund?.at || new Date().toISOString())))}
+    ${(order.items || []).map((i) => E.itemBlock(origin, i)).join('')}
+    ${E.totalsBlock(order)}
+    <tr><td style="padding:26px 28px 20px;font-family:${E.SANS};font-size:13.5px;line-height:1.6;color:${E.MUTED}">
+      Refunds usually show within three to five working days, sometimes a little
+      longer depending on your bank. If it has not appeared after a week, reply
+      to this email and we will chase it.
+    </td></tr>
+    ${E.footNote(contact)}
+  `);
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+/**
+ * The cancellation email. Sent when an order is stopped BEFORE it goes out, so
+ * it has to say two things at once: it is not coming, and the money is going
+ * back. Never tell someone their order is cancelled without saying that.
+ */
+export function cancelledEmail(order, opts = {}) {
+  const origin = opts.origin || 'https://drewrys.store';
+  const contact = opts.contactEmail || 'hello@drewrys.store';
+  const c = order.customer || {};
+  const amount = opts.amount ?? order.refund?.amount ?? order.total;
+
+  return E.shell(`
+    ${E.masthead(origin)}
+    ${E.heading('Order cancelled')}
+    <tr><td style="padding:14px 28px 0;font-family:${E.SANS};font-size:15px;line-height:1.6;color:${E.INK}">
+      ${c.name ? E.esc(String(c.name).split(' ')[0]) + ', we' : 'We'} are sorry, we have had to
+      cancel this order before it went out. Nothing has been sent, and we have
+      refunded <strong>${E.gbp(amount)}</strong> to the card you paid with.
+    </td></tr>
+    ${E.factRow('Order number', E.esc(order.reference),
+                'Cancelled', E.esc(E.niceDate(order.refund?.at || new Date().toISOString())))}
+    ${(order.items || []).map((i) => E.itemBlock(origin, i)).join('')}
+    ${E.totalsBlock(order)}
+    <tr><td style="padding:26px 28px 20px;font-family:${E.SANS};font-size:13.5px;line-height:1.6;color:${E.MUTED}">
+      Refunds usually show within three to five working days. If you still want
+      these, everything is on the site and you are welcome to order again, or
+      reply to this email and we will sort it out with you.
+    </td></tr>
+    ${E.footNote(contact)}
+  `);
 }

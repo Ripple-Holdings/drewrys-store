@@ -398,3 +398,13 @@ export function dispatchedEmail(order, opts = {}) {
     ${footNote(contact)}
   `);
 }
+
+/**
+ * The email building blocks, exported so refunds.js builds its two emails from
+ * the SAME masthead, heading, item blocks and totals as every other customer
+ * email. Anything reaching a customer should look like it came from one shop.
+ */
+export const EMAIL_PARTS = {
+  shell, masthead, heading, factRow, itemBlock, totalsBlock, footNote,
+  niceDate, esc, gbp, SANS, INK, MUTED, COTTON,
+};

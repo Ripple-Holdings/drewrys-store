@@ -146,6 +146,21 @@ textarea{min-height:84px;resize:vertical;line-height:1.45}
   background:#fff;color:var(--ink);padding:0 18px;border-radius:10px;font-size:14px;
   cursor:pointer;height:44px;font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .ghost:hover{background:var(--cotton)}
+/* Destructive actions in a red pill, sized so they never compete with the big
+   black fulfilment button above them. */
+button.tiny{width:auto;min-height:0;margin:0;background:#9A3B34;
+  border:0;padding:8px 17px;border-radius:999px;
+  font-family:'NeueMontreal','Geist',system-ui,sans-serif;
+  font-size:13px;font-weight:600;color:#fff;cursor:pointer}
+button.tiny:hover{background:#7f2f29}
+button.pill-danger{width:auto;min-height:0;margin-top:14px;background:#9A3B34;
+  border:0;padding:12px 24px;border-radius:999px;
+  font-family:'NeueMontreal','Geist',system-ui,sans-serif;
+  font-size:14.5px;font-weight:600;color:#fff;cursor:pointer}
+button.pill-danger:hover{background:#7f2f29}
+button.pill-danger:disabled{opacity:.6;cursor:default}
+.panel--tight{margin-top:10px;padding:16px;background:var(--cotton);
+  border:1px solid var(--line);border-radius:12px}
 .ghost.del{background:#a33b30;border-color:#a33b30;color:#fff}
 .ghost.del:hover{background:#8f3128;border-color:#8f3128}
 .svcrow{display:flex;gap:9px;align-items:flex-start;margin-top:9px}
@@ -245,7 +260,8 @@ var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
-var tab='dashboard', openCard=null, orderView='todo', revView='pending', DIAG=null;
+var tab='dashboard', openCard=null, orderView='todo', revView='pending', DIAG=null,
+    REFUND_FOR=null;
 
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
@@ -564,15 +580,16 @@ function render(){
       '<button type="button" data-oview="todo"'+(orderView!=='done'?' class="on"':'')+'>'+
         'To fulfil'+(pend.length?' ('+pend.length+')':'')+'</button>'+
       '<button type="button" data-oview="done"'+(orderView==='done'?' class="on"':'')+'>'+
-        'Done'+(done.length?' ('+done.length+')':'')+'</button></div>';
+        'Done'+(done.length?' ('+done.length+')':'')+'</button>'+
+      '<button type="button" data-oview="pay"'+(orderView==='pay'?' class="on"':'')+'>'+
+        'Payments</button></div>';
 
     if(!S.orders.length){
       h+='<div class="note">No paid orders yet. They appear here the moment Teya confirms '+
          'payment, and a copy goes to your email.</div>';
     } else if(!list.length){
       h+='<div class="note">'+(orderView==='done'
-        ?'Nothing completed yet.':'Nothing waiting.')+      '<button type="button" data-oview="pay"'+(orderView==='pay'?' class="on"':'')+'>Payments</button>'+
-'</div>';
+        ?'Nothing completed yet.':'Nothing waiting.')+'</div>';
     }
 
     list.forEach(function(o){
@@ -641,6 +658,67 @@ function render(){
             '<button type="button" class="ghost" data-act="undo" data-ref="'+esc(o.reference)+'">Undo</button></div>';
         }
       }
+      // ── cancel / refund ──────────────────────────────────────────────
+      // CANCEL sits with an order still to fulfil: it has not gone out, so it
+      // is stopped and the money returned. REFUND sits with a completed one:
+      // it has been collected or dispatched and is coming back.
+      // Small text control, opening a compact panel, so it can never be hit
+      // by accident next to the big fulfilment button.
+      var gone=(o.status==='collected'||o.status==='dispatched');
+      var isCancel=!gone;
+      var open=(REFUND_FOR===o.reference);
+
+      if(o.refund){
+        h+='<div class="doneline" style="margin-top:12px">'+
+           (o.refund.kind==='cancel'?'Cancelled and refunded ':'Refunded ')+
+           money(o.refund.amount)+' &middot; '+
+           esc(String(o.refund.at||'').slice(0,16).replace('T',' '))+'</div>'+
+           '<div class="hint">'+esc(o.refund.reason_label||'')+
+           (o.refund.restocked?' &middot; back in stock'
+                              :' &middot; not restocked ('+esc(o.refund.no_restock_label||'')+')')+
+           (o.refund.note?' &middot; '+esc(o.refund.note):'')+'</div>';
+      } else if(o.refund_state==='pending'){
+        h+='<div class="doneline" style="margin-top:12px">Submitted, waiting on Teya</div>'+
+           '<div class="hint">Teya accepted it but has not confirmed. Nothing has been '+
+           'restocked and the customer has not been emailed.</div>';
+      } else if(o.status!=='pending'&&o.status!=='failed'&&o.status!=='cancelled'){
+        h+='<div style="margin-top:14px"><button type="button" class="tiny" '+
+             'data-rtog="'+esc(o.reference)+'">'+
+             (open?'Close':(isCancel?'Cancel order':'Refund order'))+'</button></div>';
+        if(open){
+          h+='<div class="panel panel--tight">'+
+            '<div><label>'+(isCancel?'Why is it being cancelled':'Reason for the return')+
+              '</label><select data-rreason="'+esc(o.reference)+'">'+
+                (S.return_reasons||[]).map(function(r){
+                  return '<option value="'+esc(r.id)+'">'+esc(r.label)+'</option>';}).join('')+
+              '</select></div>'+
+            (isCancel
+              ? '<div class="hint" style="margin-top:8px">It has not gone out, so the stock '+
+                'goes straight back on the shelf.</div>'
+              : '<div style="display:flex;gap:10px;align-items:center;margin-top:12px">'+
+                  '<input type="checkbox" id="rs-'+esc(o.reference)+'" '+
+                    'data-rstock="'+esc(o.reference)+'" checked '+
+                    'style="width:17px;height:17px;flex:0 0 auto;margin:0;accent-color:#2B3037">'+
+                  '<label for="rs-'+esc(o.reference)+'" style="display:inline;margin:0;'+
+                    'font-size:14px;color:var(--ink);white-space:normal;cursor:pointer">'+
+                    'Put the items back into stock</label></div>'+
+                '<div data-rnostock-wrap="'+esc(o.reference)+'" hidden style="margin-top:10px">'+
+                  '<label>Why it cannot go back on the shelf</label>'+
+                  '<select data-rnostock="'+esc(o.reference)+'">'+
+                    (S.no_restock_reasons||[]).map(function(r){
+                      return '<option value="'+esc(r.id)+'">'+esc(r.label)+'</option>';}).join('')+
+                  '</select></div>')+
+            '<div style="margin-top:10px"><label>Note, optional</label>'+
+              '<input data-rnote="'+esc(o.reference)+'" placeholder="Anything worth recording"></div>'+
+            '<button type="button" class="pill-danger" '+
+              'data-rgo="'+esc(o.reference)+'" data-rkind="'+(isCancel?'cancel':'refund')+'">'+
+              (isCancel?'Cancel and refund ':'Refund ')+money(o.total||0)+'</button>'+
+            '<div class="hint">Full amount only. Sends the money back through Teya and emails '+
+            'the customer. Card refunds take a few days to land, and the email says so.</div>'+
+          '</div>';
+        }
+      }
+
       h+='</div></div>';
     });
   }
@@ -726,10 +804,21 @@ function render(){
 
 /* ── interactions ───────────────────────────────────────────────────────── */
 
+// Unticking "put the items back into stock" has to reveal the reason picker.
+// Delegated, because the panel is re-rendered on every state change.
+document.addEventListener('change',function(e){
+  var c=e.target;
+  if(c && c.dataset && c.dataset.rstock!==undefined){
+    var wrap=document.querySelector('[data-rnostock-wrap="'+c.dataset.rstock+'"]');
+    if(wrap) wrap.hidden = c.checked;
+  }
+});
+
 document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
+    '[data-rtog],[data-rgo],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(!t) return;
 
@@ -745,6 +834,44 @@ document.addEventListener('click',function(e){
     render(); refreshBar(); return; }
 
   if(t.dataset.oview!==undefined){ orderView=t.dataset.oview; if(t.dataset.oview==='pay') DIAG=null; render(); return; }
+
+  if(t.dataset.rtog!==undefined){
+    REFUND_FOR = (REFUND_FOR===t.dataset.rtog) ? null : t.dataset.rtog;
+    render(); return;
+  }
+
+  if(t.dataset.rgo!==undefined){
+    var ref=t.dataset.rgo;
+    var restock=!!(document.querySelector('[data-rstock="'+ref+'"]')||{}).checked;
+    var payload={reference:ref, action:(t.dataset.rkind||'refund'),
+      reason:(document.querySelector('[data-rreason="'+ref+'"]')||{}).value||'',
+      restock:restock,
+      note:(document.querySelector('[data-rnote="'+ref+'"]')||{}).value||''};
+    if(!restock) payload.no_restock_reason=(document.querySelector('[data-rnostock="'+ref+'"]')||{}).value||'';
+    // No confirm dialog on purpose: the panel has to be opened deliberately
+    // and the button states the amount, so the intent is already explicit.
+    t.disabled=true; t.textContent='Refunding...';
+    fetch('/admin',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':KEY},
+      body:JSON.stringify({order:payload})})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        var i=S.orders.findIndex(function(o){return o.reference===ref;});
+        if(d.pending){
+          if(i>=0 && d.order) S.orders[i]=d.order;
+          REFUND_FOR=null; render();
+          toast('Teya has it but has not confirmed yet - not refunded');
+          return;
+        }
+        if(d.error){ toast(d.error); t.disabled=false; t.textContent='Try again'; return; }
+        if(i>=0) S.orders[i]=d.order;
+        REFUND_FOR=null; render();
+        toast(t.dataset.rkind==='cancel'
+          ? 'Cancelled and refunded. The customer has been emailed.'
+          : 'Refunded. The customer has been emailed.');
+      })
+      .catch(function(){ toast('Could not reach the server'); t.disabled=false; });
+    return;
+  }
 
   if(t.dataset.recon!==undefined){
     t.textContent='Checking...';
