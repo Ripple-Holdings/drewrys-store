@@ -158,7 +158,8 @@ button.calbtn{width:auto;min-height:0;margin:0;display:inline-flex;align-items:c
   box-shadow:0 24px 60px -24px rgba(25,28,33,.45)}
 .calside{display:flex;flex-direction:column;border-right:1px solid var(--line);
   padding:8px 0;min-width:150px;background:#fff}
-.calside button{width:100%;min-height:0;margin:0;border:0;border-radius:0;background:none;
+.calside button{width:calc(100% - 12px);min-height:0;margin:2px 6px;border:0;border-radius:9px;
+  background:var(--cotton-2);
   text-align:left;padding:9px 18px;font-size:13.5px;color:var(--ink);cursor:pointer;
   font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .calside button:hover{background:var(--cotton)}
@@ -172,7 +173,8 @@ button.calapply:disabled{opacity:.35;cursor:default}
 .calhead{display:flex;align-items:center;gap:8px;padding:0 4px 10px}
 .calmon{font-size:14.5px;font-weight:600;min-width:118px;text-align:center}
 .calgap{flex:1}
-button.calnav{width:28px;height:28px;min-height:0;margin:0;padding:0;border:0;background:none;
+button.calnav{width:28px;height:28px;min-height:0;margin:0;padding:0;border:0;border-radius:99px;
+  background:var(--cotton-2);
   color:var(--muted);font-size:14px;cursor:pointer;border-radius:7px}
 button.calnav:hover{background:var(--cotton);color:var(--ink)}
 .calgrids{display:flex;gap:26px}
@@ -194,9 +196,9 @@ button.calnav:hover{background:var(--cotton);color:var(--ink)}
   border-bottom:2px solid transparent}
 .calfield.act{color:var(--ink);border-bottom-color:var(--ink)}
 .calarrow{color:var(--muted);font-size:13px}
-button.callink{width:auto;min-height:0;margin:0;padding:2px 4px;border:0;background:none;
-  color:var(--peanut-deep);font-size:13px;cursor:pointer}
-button.callink:hover{text-decoration:underline}
+button.callink{width:auto;min-height:0;margin:0;padding:7px 14px;border:1px solid var(--line);
+  background:#fff;border-radius:999px;color:var(--ink);font-size:13px;cursor:pointer}
+button.callink:hover{background:var(--cotton)}
 @media(max-width:820px){
   .calpop{flex-direction:column;left:0;right:0}
   .calside{flex-direction:row;flex-wrap:wrap;border-right:0;
@@ -247,14 +249,15 @@ button.pill-danger:disabled{opacity:.6;cursor:default}
 .steprow textarea{min-height:44px}
 .steprow .x{flex:0 0 auto;width:44px;height:44px;border:1px solid var(--line);background:#fff;
   border-radius:9px;cursor:pointer;color:var(--muted);font-size:17px}
-.addstep{margin:12px 0 16px;background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
-  padding:10px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
+.addstep{margin:12px 0 16px;background:#C79A6B;border:0;color:#191C21;font-weight:600;
+  padding:10px 17px;border-radius:999px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
+.addstep:hover{background:#b8895a}
 .upload{display:flex;align-items:center;gap:11px;margin-top:6px}
 .upload button{background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
-.addnew{width:100%;padding:14px;border:1px dashed var(--line);background:none;color:var(--muted);
-  border-radius:14px;font-size:14.5px;font-weight:500;cursor:pointer;min-height:52px;margin-bottom:12px}
-.addnew:hover{border-color:var(--olive);color:var(--ink)}
+.addnew{width:100%;padding:14px;border:0;background:#C79A6B;color:#191C21;
+  border-radius:999px;font-size:14.5px;font-weight:600;cursor:pointer;min-height:52px;margin-bottom:12px}
+.addnew:hover{background:#b8895a}
 
 .note{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 15px;
   margin-bottom:12px;font-size:13.5px;color:var(--muted);line-height:1.5}
@@ -1139,7 +1142,17 @@ document.addEventListener('change',function(e){
   }
 });
 
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&(typeof CALOPEN!=='undefined')&&CALOPEN){
+    CALOPEN=false; CALM=null; render();
+  }
+});
+
 document.addEventListener('click',function(e){
+  // Clicking anywhere outside the date picker closes it, the way every date
+  // picker behaves. If the click also landed on another control, the close
+  // rides along and that control's own branch does the re-render.
+  var caloutside=(typeof CALOPEN!=='undefined')&&CALOPEN&&!e.target.closest('.calwrap');
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
@@ -1147,6 +1160,7 @@ document.addEventListener('click',function(e){
     '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
     '[data-calapply],'+
     '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
+  if(caloutside){ CALOPEN=false; CALM=null; if(!t){ render(); return; } }
   if(!t) return;
 
   if(t.dataset.prdel!==undefined){
