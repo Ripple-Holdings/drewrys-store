@@ -58,12 +58,24 @@ SHOP_CONTACT_EMAIL = "hello@drewrys.store"
 
 # Secrets — set these in the Cloudflare dashboard under the Worker's
 # Settings › Variables and Secrets (encrypted). Not here, and not via
-# wrangler, which isn't available on a Chromebook.
+# wrangler, which isn't available on a Chromebook. This list matches what
+# src/ actually reads (grep env. to re-verify):
 #
-#   ADMIN_KEY             PIN for /admin
-#   TEYA_API_KEY          from Ben's Teya Business Portal
-#   TEYA_STORE_ID         GB1953MQ (the Drewrys store profile)
+#   ADMIN_KEY             the /admin key. Also salts visitor hashing when
+#                         ANALYTICS_SALT is not set
+#   TEYA_CLIENT_ID        OAuth credential from Ben's Teya Business Portal
+#   TEYA_CLIENT_SECRET    its secret
+#   TEYA_STORE_ID         537148e6-... (the E-commerce store profile)
 #   TEYA_WEBHOOK_SECRET   captured when the webhook is created
 #   SENDGRID_API_KEY      order emails
+#   ADDRESS_API_KEY       getaddress.io postcode lookup
+#
+# Optional:
+#   ANALYTICS_SALT        dedicated salt for visitor hashing
+#   TEYA_TOKEN_URL        override the token endpoint if Teya move it
+#   TEYA_EXTRA_SESSION_JSON  extra fields merged into checkout sessions
+#   TEYA_API_KEY          LEGACY static bearer, superseded by the OAuth pair;
+#                         still honoured by teya.js if it is all that is set
+#
 #   (SHOP_ORDER_EMAIL, SHOP_FROM_EMAIL and SHOP_CONTACT_EMAIL are NOT secrets
 #    and are set in [vars] above.)
