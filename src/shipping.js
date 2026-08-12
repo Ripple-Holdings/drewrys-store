@@ -14,16 +14,22 @@
 import { countryByCode } from './countries.js';
 
 export const DEFAULT_ZONES = [
-  { id: 'iom', name: 'Isle of Man', placeholder: 'IM1 1AA', active: true },
-  { id: 'uk', name: 'United Kingdom', placeholder: 'SW1A 1AA', active: true },
-  { id: 'eu', name: 'Europe', placeholder: 'Postal code', active: true },
+  // Every zone ships INACTIVE by design. These defaults are only ever seen on
+  // a first run or after a settings wipe, and in either case delivery must be
+  // a deliberate decision made in the admin, not something a blank KV switched
+  // on - a wipe once threatened to silently turn Europe delivery back on.
+  // Collection keeps working with zero active zones; checkout answers
+  // "We cannot deliver to X at the moment" until a zone is enabled.
+  { id: 'iom', name: 'Isle of Man', placeholder: 'IM1 1AA', active: false },
+  { id: 'uk', name: 'United Kingdom', placeholder: 'SW1A 1AA', active: false },
+  { id: 'eu', name: 'Europe', placeholder: 'Postal code', active: false },
 ];
 
 export const DEFAULT_METHODS = [
-  { id: 'iom-next-day', zone: 'iom', name: 'Next day tracked', note: 'Tracked, next working day', price: 250, active: true },
-  { id: 'uk-tracked', zone: 'uk', name: 'Tracked', note: 'Tracked delivery', price: 450, active: true },
-  { id: 'eu-standard', zone: 'eu', name: 'Standard', note: 'Untracked', price: 600, active: true },
-  { id: 'eu-tracked', zone: 'eu', name: 'Tracked', note: 'Tracked and signed for', price: 1250, active: true },
+  { id: 'iom-next-day', zone: 'iom', name: 'Next day tracked', note: 'Tracked, next working day', price: 250, active: false },
+  { id: 'uk-tracked', zone: 'uk', name: 'Tracked', note: 'Tracked delivery', price: 450, active: false },
+  { id: 'eu-standard', zone: 'eu', name: 'Standard', note: 'Untracked', price: 600, active: false },
+  { id: 'eu-tracked', zone: 'eu', name: 'Tracked', note: 'Tracked and signed for', price: 1250, active: false },
 ];
 
 /** Isle of Man postcodes are the IM district. Nothing else uses that prefix. */

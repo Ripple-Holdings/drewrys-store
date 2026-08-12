@@ -77,7 +77,9 @@ async function renderSite(request, env) {
     ingredients: await getIngredients(env),
     reviews: publishedReviews(allReviews),
     ratings: ratingSummary(allReviews),
-    payments_live: !!(env.TEYA_API_KEY && env.TEYA_STORE_ID),
+    // Same credential test as teya.js: OAuth pair, or the legacy static key.
+    payments_live: !!(((env.TEYA_CLIENT_ID && env.TEYA_CLIENT_SECRET) || env.TEYA_API_KEY)
+                      && env.TEYA_STORE_ID),
     // Footer links. Empty means the link is hidden rather than pointing at "#",
     // which is what sent every one of them back to the top of the page.
     // A hand-picked review for the contact panel. Blank means the panel falls
