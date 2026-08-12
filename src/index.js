@@ -1153,8 +1153,16 @@ export default {
       if (path === '/api/address') return lookupPostcode(request, env, url);
       if (path === '/api/promo' && request.method === 'POST') return checkPromos(request, env);
       if (path === '/api/catalogue') {
+        // The PUBLIC view, identical to what the homepage injects: hidden
+        // products stay hidden, and prices are the SELLING price so a product
+        // entered exclusive of VAT cannot show its net figure. The raw
+        // catalogue is admin-only. Before this filter the endpoint leaked
+        // drafts and net prices to anyone who knew the URL.
         const cat = await getCatalogue(env);
-        return json({ ...cat, stock: await stockMap(env, cat.products) });
+        const settings = await getSettings(env);
+        const live = cat.products.filter((p) => p.active !== false)
+          .map((p) => ({ ...p, price_pence: sellingPrice(p, settings) }));
+        return json({ ...cat, products: live, stock: await stockMap(env, live) });
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
       if (path === '/api/subscribe' && request.method === 'POST') return subscribe(request, env);
