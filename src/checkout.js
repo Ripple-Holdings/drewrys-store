@@ -292,6 +292,8 @@ const byCode=Object.fromEntries((D.countries||[]).map(c=>[c.code,c]));
 let FUL='collect', METHOD=null, LINES=[];\nlet CODES=[];                                  // codes the customer has entered\nlet PROMOR={applied:[],rejected:[],discount:0}; // last /api/promo answer, authoritative for display
 
 /* the bag, as left by the shop */
+let TOUCHED=false;  // they have typed in or left at least one field
+let TRIED=false;    // they have pressed Continue to payment
 let DROPPED=[];   // lines removed because they sold out while in the bag
 try{
   const raw=(JSON.parse(localStorage.getItem('drw_cart_v1')||'[]')||[])
@@ -450,8 +452,12 @@ function refresh(){
 
   const p=problem();
   const msg=document.getElementById('msg');
-  msg.textContent=p||'';
-  msg.className='msg'+(p?' warn':'');
+  // Telling someone their email is invalid before they have typed anything is
+  // just nagging. The BUTTON still reflects the real state from the start; only
+  // the message waits until they have touched a field or tried to pay.
+  const show = p && (TOUCHED || TRIED);
+  msg.textContent=show?p:'';
+  msg.className='msg'+(show?' warn':'');
   document.getElementById('pay').disabled=!!p;
 
   const btn=document.getElementById('find');
@@ -535,9 +541,15 @@ function start(){
   }));
   document.querySelector('[data-ful="collect"]').click();
 
-  ['cEmail','cName','cPhone','a1','a2','aCity','pc'].forEach(id=>
-    document.getElementById(id).addEventListener('input',()=>{
-      document.getElementById('sugg').hidden=true; renderServices(); refresh(); }));
+  ['cEmail','cName','cPhone','a1','a2','aCity','pc'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.addEventListener('input',()=>{
+      TOUCHED=true;
+      document.getElementById('sugg').hidden=true; renderServices(); refresh(); });
+    // Leaving a field they never filled counts too, so tabbing past the email
+    // and coming back still tells them what is wrong.
+    el.addEventListener('blur',()=>{ TOUCHED=true; refresh(); });
+  });
   sel.addEventListener('change',()=>{
     const c=byCode[sel.value];
     const z=c&&c.zone?(D.zones||[]).find(z=>z.id===c.zone):null;
@@ -581,7 +593,8 @@ function start(){
   });
 
   document.getElementById('pay').addEventListener('click',async function(){
-    if(problem()) return;
+    TRIED=true;
+    if(problem()){ refresh(); return; }
     const b=this, was=b.textContent; b.disabled=true; b.textContent='Taking you to payment…';
     const v=id=>(document.getElementById(id).value||'').trim();
     try{
