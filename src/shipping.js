@@ -61,6 +61,25 @@ export function methodsForZone(settings, zoneId) {
  * The reverse - claiming the Isle of Man with a postcode that is not IM -
  * is the underpaying direction and is rejected rather than corrected.
  */
+/**
+ * Which destination a country posts in.
+ *
+ * countries.js is the built-in map. settings.country_zones is an OVERRIDE set
+ * by the admin, so a country can be moved to a destination of its own - France
+ * pulled out of Europe onto its own route, say - without a code change. An
+ * override of '' means "we do not deliver there", which is how a country gets
+ * removed from a destination without inventing a placeholder zone.
+ */
+export function countryZone(settings, code) {
+  const over = settings && settings.country_zones;
+  const key = String(code || '').toUpperCase();
+  if (over && Object.prototype.hasOwnProperty.call(over, key)) {
+    return over[key] || null;
+  }
+  const c = countryByCode[key];
+  return c ? c.zone : null;
+}
+
 export function resolveZone(settings, country, postcode) {
   const pc = String(postcode || '').trim();
   const live = zones(settings);
@@ -87,13 +106,14 @@ export function resolveZone(settings, country, postcode) {
   if (c.code === 'IM') {
     return { error: 'That postcode is not an Isle of Man one. Please check it.' };
   }
-  if (!c.zone) {
+  const zoneId = countryZone(settings, c.code);
+  if (!zoneId) {
     return { error: `We cannot deliver to ${c.name} yet. Collection in store is still available.` };
   }
-  if (!has(c.zone)) {
+  if (!has(zoneId)) {
     return { error: `We cannot deliver to ${c.name} at the moment.` };
   }
-  return { zone: c.zone, country: c.code };
+  return { zone: zoneId, country: c.code };
 }
 
 /** Pick and validate the service. Returns { method } or { error }. */

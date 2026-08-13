@@ -17,7 +17,7 @@ import {
   getIngredients, getSessionStatus, refundPayment, tokenDiagnostic, pathProbe, DEFAULT_SETTINGS,
 } from './teya.js';
 import { GATE, adminHtml } from './admin.js';
-import { zones, methods } from './shipping.js';
+import { zones, methods, countryZone } from './shipping.js';
 import { COUNTRIES } from './countries.js';
 import { CARRIERS, confirmationEmails, dispatchedEmail, readyEmail,
          collectedEmail, reviewRequestEmail, publicReviewInviteEmail } from './fulfilment.js';
@@ -120,8 +120,12 @@ async function renderCheckout(env) {
     zones: zones(settings),
     methods: methods(settings),
     countries: (() => {
+      // The zone a country posts in can be overridden in settings, so ask
+      // countryZone rather than reading the built-in map.
       const live = new Set(zones(settings).map((z) => z.id));
-      return COUNTRIES.filter((c) => c.zone && live.has(c.zone));
+      return COUNTRIES
+        .map((c) => ({ ...c, zone: countryZone(settings, c.code) }))
+        .filter((c) => c.zone && live.has(c.zone));
     })(),
     // The hint under the dropdown has to name the zones that are actually on.
     delivers_to: zones(settings).map((z) => z.name),
@@ -1089,6 +1093,15 @@ async function handleAdmin(request, env, url, ctx) {
         feature_quote: String(st.feature_quote || '').slice(0, 400),
         feature_name: String(st.feature_name || '').slice(0, 80),
         feature_sub: String(st.feature_sub || '').slice(0, 80),
+        country_zones: (() => {
+          const src = st.country_zones && typeof st.country_zones === 'object' ? st.country_zones : {};
+          const out = {};
+          for (const [k, v] of Object.entries(src)) {
+            const code = String(k).toUpperCase().slice(0, 2);
+            if (/^[A-Z]{2}$/.test(code)) out[code] = String(v || '').slice(0, 40);
+          }
+          return out;
+        })(),
         vat_registered: st.vat_registered === true,
         vat_number: String(st.vat_number || '').slice(0, 30),
         vat_rate: (st.vat_rate === undefined || st.vat_rate === null || st.vat_rate === '')
@@ -1117,6 +1130,8 @@ async function handleAdmin(request, env, url, ctx) {
     return_reasons: RETURN_REASONS,
     no_restock_reasons: NO_RESTOCK_REASONS,
     leads: await listLeads(env),
+    countries: COUNTRIES.map((c) => ({ code: c.code, name: c.name,
+      zone: countryZone(adminSettings, c.code) })),
     vat_periods: vatPeriods(),
     vat: vatSettings(adminSettings),
     reviews: await getReviews(env),
