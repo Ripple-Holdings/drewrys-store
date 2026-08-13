@@ -22,7 +22,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
 function deliversTo(state) {
   const names = (state && state.delivers_to) || [];
   if (!names.length) return 'Collection only at the moment.';
+  // If any destination name already contains its own conjunction ("United
+  // Kingdom & Channel Islands"), adding another " and " reads as word soup -
+  // commas throughout are cleaner than "X and Y & Z".
+  const hasConj = names.some(n => /&|\band\b/i.test(n));
   const list = names.length === 1 ? names[0]
+    : hasConj ? names.join(', ')
     : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
   return `We deliver to ${list}.`;
 }
@@ -84,7 +89,9 @@ h2{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.012em;
 label{display:block;font-size:.85rem;font-weight:600;color:var(--muted);margin:0 0 6px}
 label .opt{font-weight:400}
 input,select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;
-  background:#fff;font-family:inherit;font-size:.95rem;color:var(--ink)}
+  background:#fff;font-family:inherit;font-size:1rem;color:var(--ink)}
+/* 1rem = 16px, and 16px is the floor: iOS Safari auto-zooms any focused input
+   under 16px and never zooms back out, which wrecked the checkout on iPhone. */
 input:focus,select:focus{outline:none;border-color:var(--peanut-deep)}
 input::placeholder{color:rgba(25,28,33,.34)}
 select{cursor:pointer}
@@ -294,7 +301,8 @@ let FUL='collect', METHOD=null, LINES=[];\nlet CODES=[];                        
 /* the bag, as left by the shop */
 let TOUCHED=false;  // they have typed in or left at least one field
 let TRIED=false;    // they have pressed Continue to payment
-let DROPPED=[];   // lines removed because they sold out while in the bag
+let REMOVED=[];   // lines taken out because they sold out while in the bag
+let REDUCED=[];   // lines cut down because fewer are left than the bag held
 try{
   const raw=(JSON.parse(localStorage.getItem('drw_cart_v1')||'[]')||[])
     .map(l=>({p:bySlug[l.slug],qty:Math.max(1,Math.min(99,l.qty|0))}))
@@ -305,14 +313,17 @@ try{
   const left=s=>{const v=(D.stock||{})[s];return v===null||v===undefined?null:v;};
   LINES=raw.filter(l=>{
     const n=left(l.p.slug);
-    if(n!==null && n<=0){ DROPPED.push(l.p.name); return false; }
+    if(n!==null && n<=0){ REMOVED.push(l.p.name); return false; }
     return true;
   }).map(l=>{
     const n=left(l.p.slug);
-    if(n!==null && l.qty>n){ DROPPED.push(l.p.name+' (only '+n+' left)'); return {p:l.p,qty:n}; }
+    // A reduced quantity is NOT out of stock and was NOT removed - the old
+    // single DROPPED list gave both cases the same wording and the dialog
+    // contradicted the order summary sitting right beside it.
+    if(n!==null && l.qty>n){ REDUCED.push({name:l.p.name,n:n}); return {p:l.p,qty:n}; }
     return l;
   });
-  if(DROPPED.length){
+  if(REMOVED.length||REDUCED.length){
     // Write the pruned bag back, so the bag and this page agree and a refresh
     // does not resurrect it.
     try{ localStorage.setItem('drw_cart_v1',
@@ -321,18 +332,18 @@ try{
 }catch(e){ LINES=[]; }
 const savedPromo=(()=>{try{return localStorage.getItem('drw_promo')||'';}catch(e){return '';}})();
 
-if(DROPPED.length){
-  const quoted=DROPPED.map(n=>'\u201c'+n+'\u201d');
-  const named=quoted.length===1 ? quoted[0]
-    : quoted.slice(0,-1).join(', ')+' and '+quoted[quoted.length-1];
-  const are=quoted.length===1?'is':'are';
-  // With something left to buy, say what we did about it. With an empty bag
-  // there is nothing to reassure them about, so do not pretend there is.
+if(REMOVED.length||REDUCED.length){
+  const names=REMOVED.concat(REDUCED.map(r=>r.name)).map(n=>'\u201c'+n+'\u201d');
+  const named=names.length===1 ? names[0]
+    : names.slice(0,-1).join(', ')+' and '+names[names.length-1];
+  // One message covering both cases - a line taken out and a line cut down are
+  // the same thing to a customer: we did not have what they picked. The items
+  // are still named, so nobody silently loses a product they meant to buy.
   document.getElementById('soBody').textContent = LINES.length
-    ? 'The '+named+' '+are+' currently out of stock. We have removed '+
-      (quoted.length===1?'it':'them')+' from your bag so you can still check out without '+
-      (quoted.length===1?'it':'them')+'.'
-    : 'The '+named+' '+are+' currently out of stock.';
+    ? 'We do not have enough of '+named+' in stock to cover your bag, so we have '+
+      'updated it to what we can send. Everything else is unchanged and you can '+
+      'still check out.'
+    : 'We do not have enough of '+named+' in stock to cover your bag.';
 
   const scrim=document.getElementById('soScrim'), box=document.getElementById('soModal');
   const closeBtn=document.getElementById('soClose');

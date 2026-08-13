@@ -252,6 +252,9 @@ button.pill-danger:disabled{opacity:.6;cursor:default}
 .addstep{margin:12px 0 16px;background:#C79A6B;border:0;color:#191C21;font-weight:600;
   padding:10px 17px;border-radius:999px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
 .addstep:hover{background:#b8895a}
+.addrow{display:flex;gap:8px;margin:12px 0 16px;align-items:center}
+.addrow input{flex:1;max-width:320px}
+.addrow .addstep,.addrow .tiny{margin:0}
 .upload{display:flex;align-items:center;gap:11px;margin-top:6px}
 .upload button{background:var(--cotton-2);border:1px solid var(--line);color:var(--ink);
   padding:9px 15px;border-radius:9px;font-size:13.5px;cursor:pointer;min-height:44px;width:auto}
@@ -320,6 +323,10 @@ var KEY=sessionStorage.getItem('drw_admin_key')||'';
 var S=${JSON.stringify(state).replace(/</g, '\\u003c')};
 var clone=function(o){return JSON.parse(JSON.stringify(o));};
 var draft=clone({catalogue:S.catalogue,stock:S.stock,settings:S.settings});
+// prompt() fails silently in browsers that suppress dialogs - the click just
+// does nothing, no error. Every add flow uses an inline field instead, gated
+// by these flags. ADDSVC holds the zone id whose add-a-service row is open.
+var ADDSVC=null, ADDING_ING=false, ADDING_PROD=false;
 var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
@@ -462,7 +469,13 @@ function render(){
   }
 
   if(tab==='catalogue'){
-    h+='<button class="addnew" id="addnew">+ Add a product</button>';
+    if(ADDING_PROD){
+      h+='<div class="addrow"><input id="newprodname" placeholder="Product name">'+
+         '<button type="button" class="addstep" id="prodsave">Add</button>'+
+         '<button type="button" class="tiny" id="prodcancel">Cancel</button></div>';
+    }else{
+      h+='<button class="addnew" id="addnew">+ Add a product</button>';
+    }
     draft.catalogue.products.forEach(function(p,i){
       var open=(openCard===p.slug);
       h+='<div class="card'+(open?' open':'')+'" data-slug="'+esc(p.slug)+'">'+
@@ -537,7 +550,13 @@ function render(){
     h+='<div class="note">These are shared across every product. An ingredient with no icon '+
        'will not appear on a product card at all, so add one before using it. '+
        'Bullets and the write-up show when a customer taps the chip in Learn more.</div>';
-    h+='<button class="addnew" id="addingredient">+ Add an ingredient</button>';
+    if(ADDING_ING){
+      h+='<div class="addrow"><input id="newingname" placeholder="Ingredient name">'+
+         '<button type="button" class="addstep" id="ingsave">Add</button>'+
+         '<button type="button" class="tiny" id="ingcancel">Cancel</button></div>';
+    }else{
+      h+='<button class="addnew" id="addingredient">+ Add an ingredient</button>';
+    }
     LIB.forEach(function(g,gi){
       var open=(openCard==='ing:'+g.slug), ic=iconUploads[g.slug]||g.icon;
       var done=(g.bullets&&g.bullets.length)||g.text;
@@ -626,7 +645,14 @@ function render(){
           '<button type="button" class="x" data-mdel="'+mi+'">&times;</button></div>';
       });
       if(!mine.length) h+='<div class="hint">No service yet - nobody can order to '+esc(z.name)+'.</div>';
-      h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>'+
+      if(ADDSVC===z.id){
+        h+='<div class="addrow"><input id="newsvcname" placeholder="Service name, e.g. Tracked">'+
+           '<button type="button" class="addstep" data-msave="'+esc(z.id)+'">Add</button>'+
+           '<button type="button" class="tiny" data-mcancel="1">Cancel</button></div>';
+      }else{
+        h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>';
+      }
+      h+=''+
         '<div class="row" style="margin-top:10px"><button type="button" class="tiny" '+
           'data-zdel="'+zi+'">Remove this destination</button></div>'+
         '<label>Free delivery over <span style="font-weight:400">(0 for none)</span></label>'+
@@ -1161,6 +1187,19 @@ document.addEventListener('keydown',function(e){
   }
 });
 
+document.addEventListener('keydown',function(e){
+  var el=e.target;
+  if(!el||!el.id) return;
+  if(el.id!=='newsvcname'&&el.id!=='newingname'&&el.id!=='newprodname') return;
+  if(e.key==='Enter'){
+    e.preventDefault();
+    var btn=el.parentNode.querySelector('.addstep');
+    if(btn) btn.click();
+  } else if(e.key==='Escape'){
+    ADDSVC=null; ADDING_ING=false; ADDING_PROD=false; render();
+  }
+});
+
 document.addEventListener('click',function(e){
   // Clicking anywhere outside the date picker closes it, the way every date
   // picker behaves. If the click also landed on another control, the close
@@ -1173,7 +1212,8 @@ document.addEventListener('click',function(e){
     '[data-rtog],[data-rgo],[data-csv],[data-vatq],[data-vatp],[data-vatcsv],'+
     '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
     '[data-calapply],'+
-    '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
+    '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient,'+
+    '[data-msave],[data-mcancel],#prodsave,#prodcancel,#ingsave,#ingcancel');
   if(caloutside){ CALOPEN=false; CALM=null; if(!t){ render(); return; } }
   if(!t) return;
 
@@ -1388,14 +1428,22 @@ document.addEventListener('click',function(e){
   }
 
   if(t.dataset.madd!==undefined){
-    var zid=t.dataset.madd;
-    var nm2=prompt('Service name, e.g. Tracked'); if(!nm2) return;
+    ADDSVC=t.dataset.madd; render();
+    var sf=document.getElementById('newsvcname'); if(sf) sf.focus();
+    return;
+  }
+  if(t.dataset.msave!==undefined){
+    var zid=t.dataset.msave;
+    var sf2=document.getElementById('newsvcname');
+    var nm2=sf2?sf2.value.trim():'';
+    if(!nm2){ if(sf2) sf2.focus(); return; }
     draft.settings.shipping_methods=draft.settings.shipping_methods||[];
     var base=zid+'-'+slugify(nm2), id2=base, n2=2;
     while(draft.settings.shipping_methods.some(function(m){return m.id===id2;})) id2=base+'-'+(n2++);
     draft.settings.shipping_methods.push({id:id2,zone:zid,name:nm2,note:'',price:0,active:true});
-    render(); refreshBar(); return;
+    ADDSVC=null; render(); refreshBar(); return;
   }
+  if(t.dataset.mcancel!==undefined){ ADDSVC=null; render(); return; }
   if(t.dataset.mdel!==undefined){
     var m2=draft.settings.shipping_methods[+t.dataset.mdel];
     if(!confirm('Remove "'+m2.name+'"?')) return;
@@ -1403,12 +1451,21 @@ document.addEventListener('click',function(e){
     render(); refreshBar(); return;
   }
   if(t.id==='addingredient'){
-    var nm=prompt('Ingredient name'); if(!nm) return;
+    ADDING_ING=true; render();
+    var gf=document.getElementById('newingname'); if(gf) gf.focus();
+    return;
+  }
+  if(t.id==='ingsave'){
+    var gf2=document.getElementById('newingname');
+    var nm=gf2?gf2.value.trim():'';
+    if(!nm){ if(gf2) gf2.focus(); return; }
     var sg=slugify(nm);
     if(LIB.some(function(x){return x.slug===sg;})){ toast('That one already exists'); return; }
     LIB.push({name:nm,slug:sg,icon:'',bullets:[],text:''});
+    ADDING_ING=false;
     openCard='ing:'+sg; render(); toast('Added. Give it an icon or it will not show.'); return;
   }
+  if(t.id==='ingcancel'){ ADDING_ING=false; render(); return; }
   if(t.dataset.gicon!==undefined){
     var gs=t.dataset.gicon;
     var fi=document.createElement('input'); fi.type='file';
@@ -1461,15 +1518,23 @@ document.addEventListener('click',function(e){
   }
 
   if(t.id==='addnew'){
-    var name=prompt('Product name'); if(!name) return;
+    ADDING_PROD=true; render();
+    var pf=document.getElementById('newprodname'); if(pf) pf.focus();
+    return;
+  }
+  if(t.id==='prodsave'){
+    var pf2=document.getElementById('newprodname');
+    var name=pf2?pf2.value.trim():'';
+    if(!name){ if(pf2) pf2.focus(); return; }
     var slug=slugify(name);
     if(draft.catalogue.products.some(function(p){return p.slug===slug;})){
       toast('A product with that name already exists'); return; }
     draft.catalogue.products.push({slug:slug,name:name,size:'',tagline:'',badge:'',
       image:'',description:'',price_pence:0,ingredients:[],howto:[],active:false});
-    draft.stock[slug]=null; openCard=slug; render();
+    draft.stock[slug]=null; ADDING_PROD=false; openCard=slug; render();
     toast('Added. Fill it in, then tick "Show on the site".'); return;
   }
+  if(t.id==='prodcancel'){ ADDING_PROD=false; render(); return; }
   if(t.dataset.toggle!==undefined){
     openCard = (openCard===t.dataset.toggle) ? null : t.dataset.toggle; render(); return;
   }
