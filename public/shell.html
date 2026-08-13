@@ -887,7 +887,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
     <div class="sec-head">
       <div>
         
-        <h2 class="disp sec-title">High performance <em>haircare</em></h2>
+        <h1 class="disp sec-title">High performance <em>haircare</em></h1>
       </div>
       <p class="sec-sub">Made using organic, sustainably sourced ingredients. Built for styling, nourishment &amp; hair health.</p>
     </div>
@@ -976,7 +976,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         <li><img class="tick" src="/img/tick.png" alt="" aria-hidden="true"><span><b>Counter display</b> and product training included</span></li>
       </ul>
     </div>
-    <div class="ws-form">
+    <form class="ws-form" id="wsForm" novalidate>
       <div class="field"><label for="wsBiz">Business name</label><input id="wsBiz" type="text" placeholder="Your salon or shop"></div>
       <div class="field"><label for="wsName">Contact name</label><input id="wsName" type="text" placeholder="Your name"></div>
       <div class="field"><label for="wsEmail">Email</label><input id="wsEmail" type="email" placeholder="you@business.com"></div>
@@ -996,7 +996,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
       <button class="btn ws-submit" id="wsSubmit">Request trade pricing</button>
       <p class="formnote" id="wsNote" style="color:rgba(243,237,225,.5)">We'll come back to you within two working days.</p>
-    </div>
+    </form>
   </div>
 </section>
 
@@ -1005,7 +1005,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
   <div class="wrap fl-in">
     <div class="fl-top">
       <div>
-        <h1 class="fl-head">Stay sharp with Drewrys.</h1>
+        <h2 class="fl-head">Stay sharp with Drewrys.</h2>
         <div class="fl-newswrap">
           <p class="fl-sub">Sign up for updates and limited edition discounts</p>
           <div class="fl-pill">
@@ -1376,13 +1376,52 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeCart();});
 
 (function(){
   const dd=document.getElementById('wsDD'); if(!dd) return;
-  const btn=dd.querySelector('.dd-btn'), list=dd.querySelector('.dd-list'), val=dd.querySelector('.dd-val'), sel=document.getElementById('wsType');
+  const btn=dd.querySelector('.dd-btn'), list=dd.querySelector('.dd-list'),
+        val=dd.querySelector('.dd-val'), sel=document.getElementById('wsType');
+  const items=[...list.querySelectorAll('li')];
+
+  // This was mouse-only: the options were <li> with a click listener, so they
+  // could not be reached by keyboard at all and a screen reader user could not
+  // change the business type. Options are now focusable and driven by the keys
+  // a listbox is expected to answer to.
+  items.forEach(li=>{
+    li.tabIndex=-1;
+    li.setAttribute('aria-selected', li.classList.contains('sel') ? 'true' : 'false');
+  });
+
   const setOpen=o=>{dd.classList.toggle('open',o);list.hidden=!o;btn.setAttribute('aria-expanded',o);};
-  btn.addEventListener('click',()=>setOpen(list.hidden));
-  list.querySelectorAll('li').forEach(li=>li.addEventListener('click',()=>{
-    list.querySelectorAll('li').forEach(x=>x.classList.remove('sel')); li.classList.add('sel');
-    val.textContent=li.textContent; sel.value=li.textContent; setOpen(false);
-  }));
+  const choose=li=>{
+    items.forEach(x=>{x.classList.remove('sel');x.setAttribute('aria-selected','false');});
+    li.classList.add('sel'); li.setAttribute('aria-selected','true');
+    val.textContent=li.textContent; sel.value=li.textContent;
+    setOpen(false); btn.focus();
+  };
+  const current=()=>items.find(x=>x.classList.contains('sel'))||items[0];
+  const open=(focusIndex)=>{
+    setOpen(true);
+    const target=focusIndex===undefined ? current() : items[focusIndex];
+    if(target) target.focus();
+  };
+
+  btn.addEventListener('click',()=>{ list.hidden ? open() : setOpen(false); });
+  btn.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){ e.preventDefault(); open(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); open(items.length-1); }
+  });
+
+  items.forEach((li,i)=>{
+    li.addEventListener('click',()=>choose(li));
+    li.addEventListener('keydown',e=>{
+      if(e.key==='ArrowDown'){ e.preventDefault(); items[(i+1)%items.length].focus(); }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); items[(i-1+items.length)%items.length].focus(); }
+      else if(e.key==='Home'){ e.preventDefault(); items[0].focus(); }
+      else if(e.key==='End'){ e.preventDefault(); items[items.length-1].focus(); }
+      else if(e.key==='Enter'||e.key===' '){ e.preventDefault(); choose(li); }
+      else if(e.key==='Escape'){ e.preventDefault(); setOpen(false); btn.focus(); }
+      else if(e.key==='Tab'){ setOpen(false); }
+    });
+  });
+
   document.addEventListener('click',e=>{ if(!dd.contains(e.target)) setOpen(false); });
 })();
 
@@ -1479,10 +1518,12 @@ renderCart();
   });
   window.__pairOpen=pairOpen;
 
-document.getElementById('wsSubmit').addEventListener('click',async function(){
+document.getElementById('wsForm').addEventListener('submit',async function(ev){
+  ev.preventDefault();
   // This button used to just relabel ITSELF "Request sent" and send nothing,
   // so every trade enquiry since launch was lost while the shop looked keen.
-  const btn=this;
+  // Now it hangs off the FORM's submit, so Enter in any field works too.
+  const btn=document.getElementById('wsSubmit');
   const get=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
   const note=document.getElementById('wsNote');
   const say=(m,bad)=>{ if(!note) return; note.textContent=m;
