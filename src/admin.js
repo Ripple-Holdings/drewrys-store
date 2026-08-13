@@ -163,22 +163,6 @@ button.calbtn{width:auto;min-height:0;margin:0;display:inline-flex;align-items:c
   text-align:left;padding:9px 18px;font-size:13.5px;color:var(--ink);cursor:pointer;
   font-family:'NeueMontreal','Geist',system-ui,sans-serif}
 .calside button:hover{background:var(--cotton)}
-.addrow{display:flex;gap:8px;align-items:center;margin-top:10px}
-.cchips{display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 10px}
-.cchip{display:inline-flex;align-items:center;gap:6px;background:var(--cotton-2);
-  border:1px solid var(--line);border-radius:99px;padding:5px 6px 5px 13px;font-size:13px}
-.cchip button{width:20px;height:20px;min-height:0;margin:0;padding:0;border:0;border-radius:50%;
-  background:none;color:var(--muted);font-size:15px;line-height:1;cursor:pointer}
-.cchip button:hover{background:var(--cotton);color:var(--ink)}
-input.csearch{margin:0}
-.chits{display:flex;flex-direction:column;gap:4px;margin-top:8px;border:1px solid var(--line);
-  border-radius:10px;padding:6px;background:#fff}
-button.chit{width:100%;min-height:0;margin:0;text-align:left;background:none;border:0;
-  border-radius:7px;padding:8px 10px;font-size:13.5px;color:var(--ink);cursor:pointer}
-button.chit:hover{background:var(--cotton)}
-button.chit span{color:var(--muted);font-size:12.5px}
-.addrow input{flex:1;min-width:0;margin:0}
-.addrow button{flex:0 0 auto;margin:0}
 button.calapply{width:auto;min-height:0;margin:0;padding:8px 18px;border:0;border-radius:99px;
   background:var(--ink);color:var(--cotton);font-size:13px;font-weight:600;cursor:pointer;
   font-family:'NeueMontreal','Geist',system-ui,sans-serif}
@@ -340,10 +324,7 @@ var LIB=clone(S.ingredients||[]);
 var iconUploads={};          // ingredient slug -> data URL waiting to be saved
 var uploads={};              // slug -> data URL waiting to be saved
 var tab='dashboard', openCard=null, orderView='todo', revView='pending', DIAG=null,
-    REFUND_FOR=null, VAT=null, VATR=null, CALOPEN=false, CALM=null, CALPICK=null,
-    ADDING=null,   // {kind:'method'|'ingredient'|'product'|'zone', zone}
-    CQ={},         // country search text, per destination
-    CEXP={};       // destinations whose full country list is expanded
+    REFUND_FOR=null, VAT=null, VATR=null, CALOPEN=false, CALM=null, CALPICK=null;
 
 // VAT date picker helpers. Everything is a plain YYYY-MM-DD string in UTC:
 // building from a local Date and slicing toISOString shifts the day behind UTC
@@ -365,76 +346,6 @@ function nextM(c){ return c.m===11 ? 0 : c.m+1; }
 // One source for the quarter list, used by the render AND the click handler.
 // They had drifted: the buttons drew from the fallback while the handler still
 // looked in S.vat_periods, so a quarter click quietly did nothing.
-// prompt() was the only dialog-based input in the whole admin, and it fails
-// SILENTLY: a browser that suppresses dialogs, or a user who has ticked
-// "prevent this page from creating additional dialogs", makes it return null
-// and the handler just returns. Click, nothing happens, no error. Everything
-// else here is an inline field, so these are too.
-function focusAdd(){
-  var el=document.getElementById('addName');
-  if(el){ el.focus(); }
-}
-
-function createFromAdder(){
-  var el=document.getElementById('addName');
-  if(!el || !ADDING) return;
-  var nm=(el.value||'').trim();
-  if(!nm){ el.focus(); toast('Give it a name first'); return; }
-
-  if(ADDING.kind==='zone'){
-    draft.settings.zones=draft.settings.zones||[];
-    var zbase=slugify(nm), zid2=zbase, zn2=2;
-    while(draft.settings.zones.some(function(z){return z.id===zid2;})) zid2=zbase+'-'+(zn2++);
-    draft.settings.zones.push({id:zid2,name:nm,placeholder:'Postal code',active:true});
-    ADDING=null; render(); refreshBar();
-    toast('Added. Now give it a country and a service, or nobody can order to it.');
-    return;
-  }
-
-  if(ADDING.kind==='method'){
-    var zid=ADDING.zone;
-    draft.settings.shipping_methods=draft.settings.shipping_methods||[];
-    var base=zid+'-'+slugify(nm), id2=base, n2=2;
-    while(draft.settings.shipping_methods.some(function(m){return m.id===id2;})) id2=base+'-'+(n2++);
-    draft.settings.shipping_methods.push({id:id2,zone:zid,name:nm,note:'',price:0,active:true});
-    ADDING=null; render(); refreshBar();
-    toast('Added. Set its price before you save.');
-    return;
-  }
-
-  if(ADDING.kind==='ingredient'){
-    var sg=slugify(nm);
-    if(LIB.some(function(x){return x.slug===sg;})){ toast('That one already exists'); return; }
-    LIB.push({name:nm,slug:sg,icon:'',bullets:[],text:''});
-    ADDING=null; openCard='ing:'+sg; render();
-    toast('Added. Give it an icon or it will not show.');
-    return;
-  }
-
-  if(ADDING.kind==='product'){
-    var slug=slugify(nm);
-    if(draft.catalogue.products.some(function(p){return p.slug===slug;})){
-      toast('A product with that name already exists'); return; }
-    draft.catalogue.products.push({slug:slug,name:nm,size:'',tagline:'',badge:'',
-      image:'',description:'',price_pence:0,ingredients:[],howto:[],active:false});
-    draft.stock[slug]=null; openCard=slug;
-    ADDING=null; render(); refreshBar();
-    toast('Added. It stays hidden until you tick Visible.');
-    return;
-  }
-}
-
-function addRow(kind, zone, placeholder){
-  return '<div class="addrow">'+
-    '<input id="addName" placeholder="'+esc(placeholder)+'" autocomplete="off">'+
-    '<button type="button" class="addstep" data-addgo="1">Add</button>'+
-    '<button type="button" class="tiny" data-addcancel="1">Cancel</button>'+
-  '</div>';
-}
-function adding(kind, zone){
-  return ADDING && ADDING.kind===kind && (zone===undefined || ADDING.zone===zone);
-}
-
 function vatPeriodList(){
   return (S.vat_periods&&S.vat_periods.length)?S.vat_periods:localQuarters();
 }
@@ -551,8 +462,7 @@ function render(){
   }
 
   if(tab==='catalogue'){
-    h+= adding('product') ? addRow('product', undefined, 'Product name')
-        : '<button class="addnew" id="addnew">+ Add a product</button>';
+    h+='<button class="addnew" id="addnew">+ Add a product</button>';
     draft.catalogue.products.forEach(function(p,i){
       var open=(openCard===p.slug);
       h+='<div class="card'+(open?' open':'')+'" data-slug="'+esc(p.slug)+'">'+
@@ -627,8 +537,7 @@ function render(){
     h+='<div class="note">These are shared across every product. An ingredient with no icon '+
        'will not appear on a product card at all, so add one before using it. '+
        'Bullets and the write-up show when a customer taps the chip in Learn more.</div>';
-    h+= adding('ingredient') ? addRow('ingredient', undefined, 'Ingredient name')
-        : '<button class="addnew" id="addingredient">+ Add an ingredient</button>';
+    h+='<button class="addnew" id="addingredient">+ Add an ingredient</button>';
     LIB.forEach(function(g,gi){
       var open=(openCard==='ing:'+g.slug), ic=iconUploads[g.slug]||g.icon;
       var done=(g.bullets&&g.bullets.length)||g.text;
@@ -707,41 +616,6 @@ function render(){
         '</div>'+
         '<div class="hint">The name is what the checkout says it delivers to, so make '+
         'it match the places this destination actually covers.</div>';
-
-      // WHICH COUNTRIES POST HERE. Without this a new destination is dead: no
-      // country points at it, so it can never be chosen at the checkout.
-      var mine=(S.countries||[]).filter(function(c){return c.zone===z.id;});
-      // Europe alone is fifty countries, so cap the list or the card becomes a
-      // wall of chips nobody can read.
-      var CAP=8, showAll=!!CEXP[z.id], shown=showAll?mine:mine.slice(0,CAP);
-      h+='<label style="margin-top:14px">Countries that post here'+
-        (mine.length?' <span style="font-weight:400">('+mine.length+')</span>':'')+'</label>'+
-        '<div class="cchips">'+
-          (mine.length
-            ? shown.map(function(c){
-                return '<span class="cchip">'+esc(c.name)+
-                  '<button type="button" data-cdel="'+esc(c.code)+'" '+
-                  'aria-label="Remove '+esc(c.name)+'">&times;</button></span>';}).join('')
-              + (mine.length>CAP
-                  ? '<button type="button" class="tiny" data-cexp="'+esc(z.id)+'">'+
-                    (showAll?'Show fewer':'Show all '+mine.length)+'</button>'
-                  : '')
-            : '<span class="hint">None yet, so nobody can choose this destination.</span>')+
-        '</div>'+
-        '<input class="csearch" data-csearch="'+esc(z.id)+'" '+
-          'value="'+esc(CQ[z.id]||'')+'" placeholder="Type a country to add it">';
-      if((CQ[z.id]||'').trim().length>1){
-        var q=(CQ[z.id]||'').trim().toLowerCase();
-        var hits=(S.countries||[]).filter(function(c){
-          return c.zone!==z.id && c.name.toLowerCase().indexOf(q)>-1;}).slice(0,8);
-        h+='<div class="chits">'+(hits.length
-          ? hits.map(function(c){
-              var where=c.zone?(S.settings.zones||[]).filter(function(x){return x.id===c.zone;})[0]:null;
-              return '<button type="button" class="chit" data-cadd="'+esc(c.code)+'" '+
-                'data-czone="'+esc(z.id)+'">'+esc(c.name)+
-                (where?'<span> moves from '+esc(where.name)+'</span>':'')+'</button>';}).join('')
-          : '<span class="hint">No country matches that.</span>')+'</div>';
-      }
       mine.forEach(function(m){
         var mi=draft.settings.shipping_methods.indexOf(m);
         h+='<div class="svcrow">'+
@@ -752,8 +626,7 @@ function render(){
           '<button type="button" class="x" data-mdel="'+mi+'">&times;</button></div>';
       });
       if(!mine.length) h+='<div class="hint">No service yet - nobody can order to '+esc(z.name)+'.</div>';
-      h+= (adding('method', z.id) ? addRow('method', z.id, 'Service name, e.g. Tracked')
-            : '<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>')+
+      h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>'+
         '<div class="row" style="margin-top:10px"><button type="button" class="tiny" '+
           'data-zdel="'+zi+'">Remove this destination</button></div>'+
         '<label>Free delivery over <span style="font-weight:400">(0 for none)</span></label>'+
@@ -761,10 +634,6 @@ function render(){
           '" inputmode="decimal" value="'+pounds((draft.settings.free_over||{})[z.id])+'"></div>'+
         '</div></div>';
     });
-    h+= adding('zone')
-      ? addRow('zone', undefined, 'Destination name, e.g. France')
-      : '<button class="addnew" id="addzone">+ Add a destination</button>';
-
     h+='<div class="note">Anywhere not listed above is refused at the basket with a note '+
        'that collection is still available - better than taking an order you cannot post.</div>';
   }
@@ -1278,12 +1147,6 @@ function render(){
 
 // Unticking "put the items back into stock" has to reveal the reason picker.
 // Delegated, because the panel is re-rendered on every state change.
-document.addEventListener('keydown',function(e){
-  if(!ADDING || !e.target || e.target.id!=='addName') return;
-  if(e.key==='Enter'){ e.preventDefault(); createFromAdder(); }
-  else if(e.key==='Escape'){ e.preventDefault(); ADDING=null; render(); }
-});
-
 document.addEventListener('change',function(e){
   var c=e.target;
   if(c && c.dataset && c.dataset.rstock!==undefined){
@@ -1306,11 +1169,11 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
-    '[data-zdel],[data-addgo],[data-addcancel],[data-cadd],[data-cdel],[data-cexp],'+
+    '[data-zdel],'+
     '[data-rtog],[data-rgo],[data-csv],[data-vatq],[data-vatp],[data-vatcsv],'+
     '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
     '[data-calapply],'+
-    '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient,#addzone');
+    '[data-act],[data-rview],[data-rev],[data-prdel],#addpromo,#addnew,#addingredient');
   if(caloutside){ CALOPEN=false; CALM=null; if(!t){ render(); return; } }
   if(!t) return;
 
@@ -1525,43 +1388,27 @@ document.addEventListener('click',function(e){
   }
 
   if(t.dataset.madd!==undefined){
-    ADDING={kind:'method',zone:t.dataset.madd}; render(); focusAdd(); return;
-  }
-  if(t.id==='addzone'){ ADDING={kind:'zone'}; render(); focusAdd(); return; }
-  if(t.dataset.addcancel!==undefined){ ADDING=null; render(); return; }
-
-  if(t.dataset.cexp!==undefined){
-    CEXP[t.dataset.cexp]=!CEXP[t.dataset.cexp]; render(); return;
-  }
-
-  if(t.dataset.cadd!==undefined){
-    // A country belongs to ONE destination, so assigning it here takes it off
-    // whichever one it was on.
-    draft.settings.country_zones=draft.settings.country_zones||{};
-    draft.settings.country_zones[t.dataset.cadd]=t.dataset.czone;
-    var cc=(S.countries||[]).filter(function(c){return c.code===t.dataset.cadd;})[0];
-    if(cc) cc.zone=t.dataset.czone;
-    CQ[t.dataset.czone]=''; render(); refreshBar(); return;
-  }
-  if(t.dataset.cdel!==undefined){
-    // Empty string means "we do not deliver there", which is different from
-    // having no override at all - that would fall back to the built-in map.
-    draft.settings.country_zones=draft.settings.country_zones||{};
-    draft.settings.country_zones[t.dataset.cdel]='';
-    var cd=(S.countries||[]).filter(function(c){return c.code===t.dataset.cdel;})[0];
-    if(cd) cd.zone=null;
+    var zid=t.dataset.madd;
+    var nm2=prompt('Service name, e.g. Tracked'); if(!nm2) return;
+    draft.settings.shipping_methods=draft.settings.shipping_methods||[];
+    var base=zid+'-'+slugify(nm2), id2=base, n2=2;
+    while(draft.settings.shipping_methods.some(function(m){return m.id===id2;})) id2=base+'-'+(n2++);
+    draft.settings.shipping_methods.push({id:id2,zone:zid,name:nm2,note:'',price:0,active:true});
     render(); refreshBar(); return;
   }
-
-  if(t.dataset.addgo!==undefined){ createFromAdder(); return; }
-
   if(t.dataset.mdel!==undefined){
     var m2=draft.settings.shipping_methods[+t.dataset.mdel];
     if(!confirm('Remove "'+m2.name+'"?')) return;
     draft.settings.shipping_methods.splice(+t.dataset.mdel,1);
     render(); refreshBar(); return;
   }
-  if(t.id==='addingredient'){ ADDING={kind:'ingredient'}; render(); focusAdd(); return; }
+  if(t.id==='addingredient'){
+    var nm=prompt('Ingredient name'); if(!nm) return;
+    var sg=slugify(nm);
+    if(LIB.some(function(x){return x.slug===sg;})){ toast('That one already exists'); return; }
+    LIB.push({name:nm,slug:sg,icon:'',bullets:[],text:''});
+    openCard='ing:'+sg; render(); toast('Added. Give it an icon or it will not show.'); return;
+  }
   if(t.dataset.gicon!==undefined){
     var gs=t.dataset.gicon;
     var fi=document.createElement('input'); fi.type='file';
@@ -1613,7 +1460,16 @@ document.addEventListener('click',function(e){
     ps.howto.splice(+sb[1],1); render(); refreshBar(); return;
   }
 
-  if(t.id==='addnew'){ ADDING={kind:'product'}; render(); focusAdd(); return; }
+  if(t.id==='addnew'){
+    var name=prompt('Product name'); if(!name) return;
+    var slug=slugify(name);
+    if(draft.catalogue.products.some(function(p){return p.slug===slug;})){
+      toast('A product with that name already exists'); return; }
+    draft.catalogue.products.push({slug:slug,name:name,size:'',tagline:'',badge:'',
+      image:'',description:'',price_pence:0,ingredients:[],howto:[],active:false});
+    draft.stock[slug]=null; openCard=slug; render();
+    toast('Added. Fill it in, then tick "Show on the site".'); return;
+  }
   if(t.dataset.toggle!==undefined){
     openCard = (openCard===t.dataset.toggle) ? null : t.dataset.toggle; render(); return;
   }
@@ -1685,9 +1541,6 @@ document.addEventListener('input',function(e){
   if(t.dataset.zone!==undefined){
     draft.settings.zones[+t.dataset.zone].active=t.checked; render(); }
   if(t.dataset.zn!==undefined){ draft.settings.zones[+t.dataset.zn].name=t.value; }
-  if(t.dataset.csearch!==undefined){ CQ[t.dataset.csearch]=t.value; render();
-    var el=document.querySelector('[data-csearch="'+t.dataset.csearch+'"]');
-    if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
   if(t.dataset.zp!==undefined){ draft.settings.zones[+t.dataset.zp].placeholder=t.value; }
   if(t.dataset.collect){ draft.settings.collect_address=t.value; }
   if(t.dataset.rs){
