@@ -282,6 +282,8 @@ export async function priceBasket(env, payload) {
 
   const lines = Array.isArray(payload.lines) ? payload.lines : [];
   const items = [];
+  const gone = [];    // lines that sold out entirely
+  const short = [];   // lines where fewer are left than were asked for
   let subtotal = 0;
 
   for (const line of lines) {
@@ -291,8 +293,13 @@ export async function priceBasket(env, payload) {
     if (!qty) continue;
 
     const stock = await getStock(env, p.slug);
-    if (stock !== null && stock <= 0) continue;               // sold out
+    // A line that has sold out, or a quantity that no longer fits, used to be
+    // dropped or quietly reduced here. That charged the customer for a smaller
+    // basket than the one on screen and let the payment complete anyway.
+    // Collect what changed and refuse below instead.
+    if (stock !== null && stock <= 0) { gone.push(p.name); continue; }
     const take = stock === null ? qty : Math.min(qty, stock); // never oversell
+    if (take < qty) short.push({ name: p.name, left: stock });
 
     // The SELLING price: for a product entered EXCLUSIVE of VAT this is the net
     // figure plus VAT, for everything else it is the figure as typed. Charging
@@ -303,7 +310,27 @@ export async function priceBasket(env, payload) {
                  vat_applicable: productTaxable(p, settings),
                  size: p.size || '', image: p.image || '' });
   }
-  if (!items.length) throw new Error('empty basket');
+  // Stop and say what happened, rather than charging for whatever survived.
+  // The checkout page prunes sold-out lines when it loads, so reaching here
+  // means stock ran out between loading the page and pressing pay.
+  if (gone.length || short.length) {
+    const parts = [];
+    if (gone.length) {
+      parts.push(gone.length === 1
+        ? `${gone[0]} sold out while you were checking out`
+        : `${gone.slice(0, -1).join(', ')} and ${gone[gone.length - 1]} sold out while you were checking out`);
+    }
+    for (const s2 of short) {
+      parts.push(s2.left > 0
+        ? `there ${s2.left === 1 ? 'is' : 'are'} only ${s2.left} ${s2.name} left`
+        : `${s2.name} sold out while you were checking out`);
+    }
+    const err = new Error(`${parts.join(', and ')}. Your bag has been updated - please check it and try again.`);
+    err.basketChanged = true;
+    err.gone = gone;
+    throw err;
+  }
+  if (!items.length) throw new Error('There is nothing in your bag to pay for.');
 
   const ful = payload.fulfilment === 'deliver' ? 'deliver' : 'collect';
 

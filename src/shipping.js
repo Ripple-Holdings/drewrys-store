@@ -21,12 +21,14 @@ export const DEFAULT_ZONES = [
   // Collection keeps working with zero active zones; checkout answers
   // "We cannot deliver to X at the moment" until a zone is enabled.
   { id: 'iom', name: 'Isle of Man', placeholder: 'IM1 1AA', active: false },
-  { id: 'uk', name: 'United Kingdom', placeholder: 'SW1A 1AA', active: false },
+  // Guernsey and Jersey map to this zone in countries.js, so the NAME has to
+  // say so - the checkout caption is built from zone names.
+  { id: 'uk', name: 'United Kingdom and Channel Islands', placeholder: 'SW1A 1AA', active: false },
   { id: 'eu', name: 'Europe', placeholder: 'Postal code', active: false },
 ];
 
 export const DEFAULT_METHODS = [
-  { id: 'iom-next-day', zone: 'iom', name: 'Next day tracked', note: 'Tracked, next working day', price: 250, active: false },
+  { id: 'iom-next-day', zone: 'iom', name: 'Tracked', note: 'Tracked, 1-2 working days', price: 250, active: false },
   { id: 'uk-tracked', zone: 'uk', name: 'Tracked', note: 'Tracked delivery', price: 450, active: false },
   { id: 'eu-standard', zone: 'eu', name: 'Standard', note: 'Untracked', price: 600, active: false },
   { id: 'eu-tracked', zone: 'eu', name: 'Tracked', note: 'Tracked and signed for', price: 1250, active: false },

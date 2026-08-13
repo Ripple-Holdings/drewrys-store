@@ -79,7 +79,7 @@ export const DEFAULT_INGREDIENTS = [
       "Revitalising",
       "Aphrodisiac"
     ],
-    "text": "A super light-weight oil with heavenly benefits, produced from the blossom of the bitter orange tree. Sooths and conditions, with anti-frugal properties to alleviate itchy or dry scalps."
+    "text": "A super light-weight oil with heavenly benefits, produced from the blossom of the bitter orange tree. Soothes and conditions, with anti-fungal properties to alleviate itchy or dry scalps."
   },
   {
     "name": "Nutmeg",
@@ -146,6 +146,6 @@ export const DEFAULT_INGREDIENTS = [
       "Protects from environmental stress & free radicals",
       "Efficacious against dandruff, dry, itchy scalps"
     ],
-    "text": "Turmeric oil has been used for centuries due to its antioxidant & anti-inflammatory properties. It contains a pigment called curcumin, which helps to sooth and condition the hair."
+    "text": "Turmeric oil has been used for centuries due to its antioxidant & anti-inflammatory properties. It contains a pigment called curcumin, which helps to soothe and condition the hair."
   }
 ];

@@ -29,6 +29,7 @@ export const BUSINESS = {
   dispatch: '1-2 working days',
   delivery_iom: '1-2 working days',
   delivery_uk: '3-5 working days',
+  // Unused while Europe is switched off. Kept so reinstating it is one row.
   delivery_intl: '7-21 working days',
 
   // Who pays to send an unwanted item back. Statutory minimum is the
@@ -177,22 +178,19 @@ may be withdrawn at any time. All prices and totals are recalculated on our
 server when you check out, so the amount charged is always the correct one.</p>
 
 <p>Prices shown INCLUDE VAT at the rate in force. The Isle of Man and the United
-Kingdom are a single VAT territory, so VAT applies to orders delivered or
-collected there. Orders exported to Europe are zero-rated for VAT, and the price
-you pay is the price shown either way. Your order confirmation shows the VAT
-included in what you paid.</p>
+Kingdom are a single VAT territory, so VAT applies to every order we currently
+take. Your order confirmation shows the VAT included in what you paid.</p>
 <h2>4. Delivery and collection</h2>
 <div class="tw"><table>
   <tr><th>Option</th><th>Cost</th><th>Timescale</th></tr>
   <tr><td>Collect from the shop</td><td>Free</td><td>${f('dispatch')}</td></tr>
-  <tr><td>Isle of Man, next day tracked</td><td>&pound;2.50</td><td>${f('delivery_iom')}</td></tr>
+  <tr><td>Isle of Man, tracked</td><td>&pound;2.50</td><td>${f('delivery_iom')}</td></tr>
   <tr><td>United Kingdom, tracked</td><td>&pound;4.50</td><td>${f('delivery_uk')}</td></tr>
-  <tr><td>Europe, standard</td><td>&pound;6.00</td><td>${f('delivery_intl')}</td></tr>
-  <tr><td>Europe, tracked</td><td>&pound;12.50</td><td>${f('delivery_intl')}</td></tr>
+  <tr><td>Guernsey and Jersey, tracked</td><td>&pound;4.50</td><td>${f('delivery_uk')}</td></tr>
 </table></div>
-<p>We do not deliver outside the Isle of Man, the United Kingdom and Europe at
-present. Rates are confirmed in your basket before you pay, and those shown
-there are the ones that apply.</p>
+<p>We deliver to the Isle of Man, the United Kingdom and the Channel Islands. We
+do not deliver to Europe or anywhere else at present. Rates are confirmed in your
+basket before you pay, and those shown there are the ones that apply.</p>
 <p>Timescales are estimates from dispatch and are not guaranteed. If your order
 has not arrived within 30 days of the contract being formed, you may cancel it
 for a full refund.</p>

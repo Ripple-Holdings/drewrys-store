@@ -604,7 +604,18 @@ function render(){
         '</span></div>'+
         '<label class="check" style="margin:0"><input type="checkbox" data-zone="'+zi+
           '"'+(z.active!==false?' checked':'')+'> on</label></div>'+
-        '<div class="body">';
+        '<div class="body">'+
+        // The name was a heading, so a destination could never be renamed - which
+        // is what stopped "United Kingdom" being corrected to include the
+        // Channel Islands it already serves.
+        '<div class="two">'+
+          '<div><label>What customers see</label>'+
+            '<input data-zn="'+zi+'" value="'+esc(z.name)+'" placeholder="Destination name"></div>'+
+          '<div><label>Postcode example</label>'+
+            '<input data-zp="'+zi+'" value="'+esc(z.placeholder||'')+'" placeholder="SW1A 1AA"></div>'+
+        '</div>'+
+        '<div class="hint">The name is what the checkout says it delivers to, so make '+
+        'it match the places this destination actually covers.</div>';
       mine.forEach(function(m){
         var mi=draft.settings.shipping_methods.indexOf(m);
         h+='<div class="svcrow">'+
@@ -616,6 +627,8 @@ function render(){
       });
       if(!mine.length) h+='<div class="hint">No service yet - nobody can order to '+esc(z.name)+'.</div>';
       h+='<button type="button" class="addstep" data-madd="'+esc(z.id)+'">+ Add a service</button>'+
+        '<div class="row" style="margin-top:10px"><button type="button" class="tiny" '+
+          'data-zdel="'+zi+'">Remove this destination</button></div>'+
         '<label>Free delivery over <span style="font-weight:400">(0 for none)</span></label>'+
         '<div class="money" style="max-width:180px"><span>£</span><input data-free="'+esc(z.id)+
           '" inputmode="decimal" value="'+pounds((draft.settings.free_over||{})[z.id])+'"></div>'+
@@ -1156,6 +1169,7 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-toggle],[data-del],[data-upload],[data-inc],[data-dec],'+
     '[data-ing],[data-stepadd],[data-stepdel],[data-gicon],[data-gdel],'+
     '[data-gbadd],[data-gbdel],[data-madd],[data-mdel],[data-oview],[data-recon],'+
+    '[data-zdel],'+
     '[data-rtog],[data-rgo],[data-csv],[data-vatq],[data-vatp],[data-vatcsv],'+
     '[data-calopen],[data-calnav],[data-calday],[data-calreset],[data-calclear],'+
     '[data-calapply],'+
@@ -1355,6 +1369,24 @@ document.addEventListener('click',function(e){
     return;
   }
 
+  if(t.dataset.zdel!==undefined){
+    var zdi=+t.dataset.zdel, zd=draft.settings.zones[zdi];
+    if(!zd) return;
+    // Its services go with it. Leaving them behind would orphan rows that no
+    // destination renders, and they would still price at checkout.
+    var svc=(draft.settings.shipping_methods||[]).filter(function(m){return m.zone===zd.id;});
+    var NL=String.fromCharCode(10);
+    if(!confirm('Remove "'+zd.name+'"'+
+      (svc.length?' and its '+svc.length+(svc.length===1?' service':' services'):'')+
+      '?'+NL+NL+'Nobody will be able to order to it. You can turn it off instead '+
+      'if you only want to pause it.')) return;
+    draft.settings.zones.splice(zdi,1);
+    draft.settings.shipping_methods=(draft.settings.shipping_methods||[])
+      .filter(function(m){return m.zone!==zd.id;});
+    if(draft.settings.free_over) delete draft.settings.free_over[zd.id];
+    render(); refreshBar(); return;
+  }
+
   if(t.dataset.madd!==undefined){
     var zid=t.dataset.madd;
     var nm2=prompt('Service name, e.g. Tracked'); if(!nm2) return;
@@ -1508,6 +1540,8 @@ document.addEventListener('input',function(e){
     draft.settings.free_over[t.dataset.free]=toPence(t.value); }
   if(t.dataset.zone!==undefined){
     draft.settings.zones[+t.dataset.zone].active=t.checked; render(); }
+  if(t.dataset.zn!==undefined){ draft.settings.zones[+t.dataset.zn].name=t.value; }
+  if(t.dataset.zp!==undefined){ draft.settings.zones[+t.dataset.zp].placeholder=t.value; }
   if(t.dataset.collect){ draft.settings.collect_address=t.value; }
   if(t.dataset.rs){
     draft.settings[t.dataset.rs] = t.type==='checkbox' ? t.checked

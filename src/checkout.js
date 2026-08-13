@@ -128,6 +128,29 @@ select{cursor:pointer}
 .sugg button:hover{background:var(--cotton)}
 
 .hint{font-size:.78rem;color:var(--muted);margin-top:6px}
+/* Sold-out notice. A dialog rather than a banner because it has to be READ:
+   the bag has changed since they left the shop, and a strip above the fold is
+   exactly the thing people scroll past. */
+.soscrim{position:fixed;inset:0;background:rgba(25,28,33,.55);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:80;
+  opacity:0;transition:opacity .22s ease}
+.soscrim.in{opacity:1}
+.somodal{position:fixed;inset:0;z-index:81;display:grid;place-items:center;padding:22px}
+.sobox{position:relative;width:min(460px,100%);background:var(--cotton);
+  border-radius:18px;padding:38px 34px 32px;text-align:center;
+  box-shadow:0 30px 70px -28px rgba(25,28,33,.55);
+  transform:translateY(12px) scale(.985);opacity:0;
+  transition:transform .26s cubic-bezier(.2,.7,.3,1),opacity .22s ease}
+.somodal.in .sobox{transform:none;opacity:1}
+.sobox h2{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.014em;
+  font-size:clamp(1.5rem,4vw,1.85rem);line-height:1.1;margin:0}
+.sobox p{font-family:"Geist",system-ui,sans-serif;margin:14px 0 0;font-size:1rem;
+  line-height:1.6;color:rgba(25,28,33,.72)}
+.sox{position:absolute;top:12px;right:14px;width:36px;height:36px;border:0;
+  border-radius:50%;background:transparent;color:var(--ink);font-size:1.5rem;
+  line-height:1;cursor:pointer;opacity:.5;transition:opacity .15s,background .15s}
+.sox:hover{opacity:1;background:var(--cotton-2)}
+@media(max-width:520px){ .sobox{padding:34px 22px 26px} }
 .msg{font-size:.84rem;margin-top:11px;color:var(--muted)}
 .msg.warn{color:#8a3d3d;font-weight:650}
 .collect{margin-top:11px;padding:13px 15px;border-radius:14px;background:var(--cotton);
@@ -183,6 +206,16 @@ select{cursor:pointer}
   <div class="toprow">
     <h1>Checkout</h1>
     <a class="btn back" href="/#shop">Continue shopping</a>
+  </div>
+</div>
+
+<div class="soscrim" id="soScrim" hidden></div>
+<div class="somodal" id="soModal" role="alertdialog" aria-modal="true"
+     aria-labelledby="soTitle" aria-describedby="soBody" hidden>
+  <div class="sobox">
+    <button class="sox" id="soClose" type="button" aria-label="Close">&times;</button>
+    <h2 id="soTitle">We&rsquo;re sorry.</h2>
+    <p id="soBody"></p>
   </div>
 </div>
 
@@ -259,13 +292,64 @@ const byCode=Object.fromEntries((D.countries||[]).map(c=>[c.code,c]));
 let FUL='collect', METHOD=null, LINES=[];\nlet CODES=[];                                  // codes the customer has entered\nlet PROMOR={applied:[],rejected:[],discount:0}; // last /api/promo answer, authoritative for display
 
 /* the bag, as left by the shop */
+let DROPPED=[];   // lines removed because they sold out while in the bag
 try{
-  LINES=(JSON.parse(localStorage.getItem('drw_cart_v1')||'[]')||[])
+  const raw=(JSON.parse(localStorage.getItem('drw_cart_v1')||'[]')||[])
     .map(l=>({p:bySlug[l.slug],qty:Math.max(1,Math.min(99,l.qty|0))}))
     .filter(l=>l.p && l.p.active!==false);
+  // The page already receives stock, it just never looked at it. A sold-out
+  // line used to sit in the summary the whole way through and only fail on the
+  // final click, with the raw server message "empty basket".
+  const left=s=>{const v=(D.stock||{})[s];return v===null||v===undefined?null:v;};
+  LINES=raw.filter(l=>{
+    const n=left(l.p.slug);
+    if(n!==null && n<=0){ DROPPED.push(l.p.name); return false; }
+    return true;
+  }).map(l=>{
+    const n=left(l.p.slug);
+    if(n!==null && l.qty>n){ DROPPED.push(l.p.name+' (only '+n+' left)'); return {p:l.p,qty:n}; }
+    return l;
+  });
+  if(DROPPED.length){
+    // Write the pruned bag back, so the bag and this page agree and a refresh
+    // does not resurrect it.
+    try{ localStorage.setItem('drw_cart_v1',
+      JSON.stringify(LINES.map(l=>({slug:l.p.slug,qty:l.qty})))); }catch(e){}
+  }
 }catch(e){ LINES=[]; }
 const savedPromo=(()=>{try{return localStorage.getItem('drw_promo')||'';}catch(e){return '';}})();
 
+if(DROPPED.length){
+  const quoted=DROPPED.map(n=>'\u201c'+n+'\u201d');
+  const named=quoted.length===1 ? quoted[0]
+    : quoted.slice(0,-1).join(', ')+' and '+quoted[quoted.length-1];
+  const are=quoted.length===1?'is':'are';
+  // With something left to buy, say what we did about it. With an empty bag
+  // there is nothing to reassure them about, so do not pretend there is.
+  document.getElementById('soBody').textContent = LINES.length
+    ? 'The '+named+' '+are+' currently out of stock. We have removed '+
+      (quoted.length===1?'it':'them')+' from your bag so you can still check out without '+
+      (quoted.length===1?'it':'them')+'.'
+    : 'The '+named+' '+are+' currently out of stock.';
+
+  const scrim=document.getElementById('soScrim'), box=document.getElementById('soModal');
+  const closeBtn=document.getElementById('soClose');
+  scrim.hidden=false; box.hidden=false;
+  requestAnimationFrame(()=>{ scrim.classList.add('in'); box.classList.add('in'); });
+  document.body.style.overflow='hidden';
+  closeBtn.focus();
+  function shut(){
+    scrim.classList.remove('in'); box.classList.remove('in');
+    document.body.style.overflow='';
+    setTimeout(()=>{ scrim.hidden=true; box.hidden=true; },240);
+    document.removeEventListener('keydown',onKey);
+  }
+  function onKey(ev){ if(ev.key==='Escape') shut(); }
+  closeBtn.addEventListener('click',shut);
+  // Escape closes for keyboard users, but a scrim click does NOT - this has to
+  // be dismissed deliberately, not swiped away by a stray click.
+  document.addEventListener('keydown',onKey);
+}
 if(!LINES.length){
   document.getElementById('empty').hidden=false;
 } else {
