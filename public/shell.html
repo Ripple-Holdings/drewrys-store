@@ -325,20 +325,40 @@ footer{background:var(--slate-2);color:var(--cream);padding-block:clamp(46px,6vw
    container (overflow:auto), which is what sticky resolves against here.
    Negative side margins let the bar span the full width under .md-body's
    padding; the bottom padding is added back inside. */
-/* A <button> sizes to fit-content even as a block-level flex box, so width has
-   to be stated - width:auto collapsed the bar into a small pill. The width is
-   the content box plus both sides of .md-body padding, which the negative
-   margins pull it out over. */
-.md-add{position:sticky;bottom:0;z-index:2;display:flex;box-sizing:border-box;
-  width:calc(100% + clamp(18px,2.6vw,28px) * 2);
-  justify-content:center;align-items:center;
-  margin:18px calc(clamp(18px,2.6vw,28px) * -1) 0;
-  border-radius:0;padding:16px;
-  box-shadow:0 -18px 24px -14px rgba(25,28,33,.28)}
+/* PINNED BUY BUTTON. It used to sit below the fold on six of eight products at
+   iPhone size and two at desktop, so the CTA only existed if you knew to scroll.
+   The fade lives on the WRAPPER, not the button, so the button stays an ordinary
+   .btn - the earlier version faked the label with a ::before and that is not
+   something to leave in the codebase. .md-dialog is the scroll container
+   (overflow:auto), which is what sticky resolves against here. */
+.md-actionwrap{position:sticky;bottom:0;z-index:3;box-sizing:border-box;
+  width:calc(100% + clamp(18px,2.6vw,28px)*2);
+  margin:26px calc(clamp(18px,2.6vw,28px)*-1) 0;
+  padding:34px clamp(18px,2.6vw,28px) calc(16px + env(safe-area-inset-bottom));
+  background:linear-gradient(to bottom,rgba(243,237,225,0) 0%,
+    var(--cotton-2) 42%,var(--cotton-2) 100%);
+  pointer-events:none}
+.md-add{pointer-events:auto;display:flex;box-sizing:border-box;width:100%;
+  justify-content:center;align-items:center;margin:0;
+  border-radius:12px;padding:15px;
+  box-shadow:0 10px 26px -12px rgba(25,28,33,.6)}
 .md-body{padding-bottom:0}
-/* Sold out is not a call to action, so it stays put in the flow. */
-.md-add[disabled]{position:static;display:flex;width:100%;margin:18px 0 0;
-  border-radius:40px;box-shadow:none}
+/* Sold out is not a call to action, so it drops the lift and the shadow. */
+.md-add[disabled]{box-shadow:none}
+/* The close button is pinned too - it is the first child of the scroll
+   container, so sticky holds it at the top. The negative bottom margin keeps
+   it out of the flow so it does not push the photo down. */
+/* .md-dialog>.md-close, not .md-close: the mobile touch-target rule further
+   down sets display:inline-flex, and an inline box ignores margin-left:auto,
+   which dropped the button to the left edge. Two classes beat one.
+   Appearance is deliberately unchanged from before - this rule pins it and
+   nothing else. */
+.md-dialog>.md-close{position:sticky;top:6px;z-index:6;display:grid;
+  place-items:center;margin:0 8px -50px auto;width:44px;height:44px;
+  background:transparent;border:0;color:var(--slate);font-size:30px;
+  line-height:1;padding:4px;opacity:.6;cursor:pointer;
+  transition:opacity .18s}
+.md-dialog>.md-close:hover{opacity:1;background:transparent}
 /* ---------- CART DRAWER ---------- */
 .cart-scrim{position:fixed;inset:0;background:rgba(20,23,27,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:900;opacity:0;pointer-events:none;transition:opacity .3s}
 .cart-scrim.open{opacity:1;pointer-events:auto}
@@ -1919,8 +1939,8 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         <p class="md-desc">${p.long||p.d}</p>
         ${detailBlock(p.n)}
         ${soldOut(p)
-          ? '<button class="btn md-add" type="button" disabled>Sold out</button>'
-          : '<button class="btn md-add" type="button">Add to bag</button>'}
+          ? '<div class="md-actionwrap"><button class="btn md-add" type="button" disabled>Sold out</button></div>'
+          : '<div class="md-actionwrap"><button class="btn md-add" type="button">Add to bag</button></div>'}
       </div>`;
     wrap.appendChild(dg);
     /* Mark's call: always the FIRST ingredient, even where the write-up is still
