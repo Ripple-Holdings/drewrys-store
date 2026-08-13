@@ -319,7 +319,26 @@ footer{background:var(--slate-2);color:var(--cream);padding-block:clamp(46px,6vw
 .md-title{font-family:"NeueMontreal";font-weight:500;letter-spacing:-.01em;text-transform:uppercase;font-size:clamp(1.4rem,3vw,2rem);line-height:1;color:var(--ink)}
 .md-sub{font-weight:600;color:var(--peanut-deep);margin-top:8px;font-size:.9rem}
 .md-desc{color:var(--ink);opacity:.78;margin-top:14px;line-height:1.6;font-size:.98rem}
-.md-add{margin-top:18px;width:100%;justify-content:center}
+/* Pinned to the bottom of the dialog. The buy button used to sit below the
+   fold on six of the eight products at iPhone size and on two at desktop, so
+   the CTA only existed if you knew to scroll for it. .md-dialog is the scroll
+   container (overflow:auto), which is what sticky resolves against here.
+   Negative side margins let the bar span the full width under .md-body's
+   padding; the bottom padding is added back inside. */
+/* A <button> sizes to fit-content even as a block-level flex box, so width has
+   to be stated - width:auto collapsed the bar into a small pill. The width is
+   the content box plus both sides of .md-body padding, which the negative
+   margins pull it out over. */
+.md-add{position:sticky;bottom:0;z-index:2;display:flex;box-sizing:border-box;
+  width:calc(100% + clamp(18px,2.6vw,28px) * 2);
+  justify-content:center;align-items:center;
+  margin:18px calc(clamp(18px,2.6vw,28px) * -1) 0;
+  border-radius:0;padding:16px;
+  box-shadow:0 -18px 24px -14px rgba(25,28,33,.28)}
+.md-body{padding-bottom:0}
+/* Sold out is not a call to action, so it stays put in the flow. */
+.md-add[disabled]{position:static;display:flex;width:100%;margin:18px 0 0;
+  border-radius:40px;box-shadow:none}
 /* ---------- CART DRAWER ---------- */
 .cart-scrim{position:fixed;inset:0;background:rgba(20,23,27,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:900;opacity:0;pointer-events:none;transition:opacity .3s}
 .cart-scrim.open{opacity:1;pointer-events:auto}
@@ -340,6 +359,35 @@ footer{background:var(--slate-2);color:var(--cream);padding-block:clamp(46px,6vw
 .qty{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:30px;overflow:hidden}
 .qty button{width:26px;height:26px;background:none;border:0;cursor:pointer;font-size:15px;color:var(--ink);line-height:1}
 .qty button:hover{background:rgba(25,28,33,.06)}
+/* At the stock ceiling the + stays clickable on purpose - clicking it is how
+   the customer gets told why, rather than pressing a dead button. */
+.qty button.at-cap{opacity:.4}
+.ci-cap{font-size:.72rem;color:var(--muted);margin-top:3px}
+/* Stock ceiling dialog - same styling as the one on /checkout, on purpose. */
+/* Above EVERYTHING. The cart drawer sits at 900 and the product modal at 1000,
+   and this dialog is raised from inside both - at a lower z-index the drawer
+   covered it and swallowed clicks on its own close button. */
+.soscrim{position:fixed;inset:0;background:rgba(25,28,33,.55);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:1100;
+  opacity:0;transition:opacity .22s ease}
+.soscrim.in{opacity:1}
+.somodal{position:fixed;inset:0;z-index:1101;display:grid;place-items:center;padding:22px}
+.soscrim[hidden],.somodal[hidden]{display:none!important}
+.sobox{position:relative;width:min(460px,100%);background:var(--cotton);
+  border-radius:18px;padding:38px 34px 32px;text-align:center;
+  box-shadow:0 30px 70px -28px rgba(25,28,33,.55);
+  transform:translateY(12px) scale(.985);opacity:0;
+  transition:transform .26s cubic-bezier(.2,.7,.3,1),opacity .22s ease}
+.somodal.in .sobox{transform:none;opacity:1}
+.sobox h2{font-family:"NeueMontreal",sans-serif;font-weight:500;letter-spacing:-.014em;
+  font-size:clamp(1.5rem,4vw,1.85rem);line-height:1.1;margin:0;text-transform:none}
+.sobox p{font-family:"Geist",system-ui,sans-serif;margin:14px 0 0;font-size:1rem;
+  line-height:1.6;color:rgba(25,28,33,.72)}
+.sox{position:absolute;top:12px;right:14px;width:36px;height:36px;border:0;
+  border-radius:50%;background:transparent;color:var(--ink);font-size:1.5rem;
+  line-height:1;cursor:pointer;opacity:.5;transition:opacity .15s,background .15s}
+.sox:hover{opacity:1;background:var(--cotton-2)}
+@media(max-width:520px){ .sobox{padding:34px 22px 26px} }
 .qty span{min-width:22px;text-align:center;font-size:.85rem;font-weight:650}
 .ci-p{font-weight:700;color:var(--peanut-deep)}
 /* fulfilment */
@@ -803,7 +851,8 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 .mfield{margin-top:16px;text-align:left}
 .mfield label{display:block;font-size:.82rem;font-weight:600;color:var(--ink);margin-bottom:6px}
 .mfield input,.mfield textarea{width:100%;background:#fff;border:1px solid rgba(25,28,33,.16);
-  border-radius:11px;padding:12px 14px;font-family:inherit;font-size:.98rem;color:var(--ink)}
+  border-radius:11px;padding:12px 14px;font-family:inherit;font-size:1rem;color:var(--ink)}
+  /* 16px floor: anything under it makes iOS Safari zoom on focus and stay zoomed */
 .mfield textarea{min-height:118px;resize:vertical}
 .mfield input:focus,.mfield textarea:focus{outline:none;border-color:var(--peanut)}
 .msend{width:100%;margin-top:20px;background:var(--slate);color:var(--cotton);border:0;
@@ -1275,7 +1324,10 @@ function loadCart(){
     var raw=localStorage.getItem(CART_KEY); if(!raw) return;
     JSON.parse(raw).forEach(function(l){
       var i=PRODUCTS.findIndex(function(p){return p.slug===l.slug;});
-      if(i>=0 && !soldOut(PRODUCTS[i])) CART[i]=Math.max(1,Math.min(99,l.qty|0));
+      if(i>=0 && !soldOut(PRODUCTS[i])){
+        var mx=PRODUCTS[i].stock!==null?Math.min(99,PRODUCTS[i].stock):99;
+        CART[i]=Math.max(1,Math.min(mx,l.qty|0));
+      }
     });
   }catch(e){}
 }
@@ -1313,8 +1365,45 @@ function flyToBag(card){
     .to(ghost,{rotation:22,scale:.14,duration:.88,ease:'power2.in'},0)
     .to(ghost,{opacity:0,duration:.24,ease:'power1.in'},.64);
 }
-function addToCart(i){ if(soldOut(PRODUCTS[i])) return; CART[i]=(CART[i]||0)+1; saveCart(); renderCart(); bumpBag(); }
-function setQty(i,q){ setTimeout(saveCart,0); if(q<=0) delete CART[i]; else CART[i]=q; renderCart(); syncBadge(); }
+/* The same dialog the checkout shows, so the customer meets one message and
+   not two. Escape and the X close it; a scrim click deliberately does not. */
+function stockDialog(name,n){
+  var scrim=document.getElementById('stkScrim'), box=document.getElementById('stkModal');
+  var closeBtn=document.getElementById('stkClose');
+  if(!scrim||!box) return;
+  document.getElementById('stkBody').textContent =
+    'We only have '+n+' of \u201c'+name+'\u201d in stock, and '+
+    (n===1?'that is':'those are')+' already in your bag. We cannot add any more '+
+    'at the moment.';
+  scrim.hidden=false; box.hidden=false;
+  requestAnimationFrame(function(){ scrim.classList.add('in'); box.classList.add('in'); });
+  closeBtn.focus();
+  function shut(){
+    scrim.classList.remove('in'); box.classList.remove('in');
+    setTimeout(function(){ scrim.hidden=true; box.hidden=true; },240);
+    document.removeEventListener('keydown',onKey);
+    closeBtn.removeEventListener('click',shut);
+  }
+  function onKey(ev){ if(ev.key==='Escape') shut(); }
+  closeBtn.addEventListener('click',shut);
+  document.addEventListener('keydown',onKey);
+}
+function addToCart(i){
+  const p=PRODUCTS[i]; if(soldOut(p)) return false;
+  const cur=CART[i]||0;
+  // The bag must never hold more than is available - the checkout would only
+  // clamp it later, after the customer had committed to the basket.
+  if(p.stock!==null && cur>=p.stock){ stockDialog(p.n,p.stock); return false; }
+  CART[i]=cur+1; saveCart(); renderCart(); bumpBag(); return true;
+}
+function setQty(i,q){
+  const p=PRODUCTS[i];
+  // Only shout when they were pushing UP into the ceiling. Coming down from a
+  // stale bag that was already over the limit is not their doing.
+  if(p&&p.stock!==null&&q>p.stock&&(CART[i]||0)>=p.stock) stockDialog(p.n,p.stock);
+  if(p&&p.stock!==null) q=Math.min(q,p.stock);
+  setTimeout(saveCart,0); if(q<=0) delete CART[i]; else CART[i]=q; renderCart(); syncBadge();
+}
 
 function renderCart(){
   const body=document.getElementById('cartBody');
@@ -1332,10 +1421,11 @@ function renderCart(){
         <div class="ci-main">
           <div class="ci-n">${p.n}</div><div class="ci-v">${p.v}</div>
           <div class="ci-row">
-            <div class="qty"><button data-q="${i}|${q-1}">&minus;</button><span>${q}</span><button data-q="${i}|${q+1}">+</button></div>
+            <div class="qty"><button data-q="${i}|${q-1}">&minus;</button><span>${q}</span><button data-q="${i}|${q+1}"${(p.stock!==null&&q>=p.stock)?' class="at-cap"':''}>+</button></div>
             <span class="ci-p">${money(p.p*q)}</span>
             <button class="ci-del" data-del="${i}" aria-label="Remove ${p.n}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></button>
           </div>
+          ${(p.stock!==null&&q>=p.stock)?'<div class="ci-cap">Only '+p.stock+' left</div>':''}
         </div>
       </div>`;}).join('');
     body.querySelectorAll('[data-q]').forEach(b=>b.addEventListener('click',()=>{const [i,q]=b.dataset.q.split('|');setQty(i,+q);}));
@@ -1461,10 +1551,12 @@ var ORDER_REF='';
 document.querySelectorAll('.add').forEach(b=>b.addEventListener('click',e=>{
   e.stopPropagation();
   const card=b.closest('.card'); const idx=card.dataset.idx;
+  // MUST go through addToCart - it is the only place that checks stock and
+  // caps the quantity, and it raises the dialog when the ceiling is hit.
+  if(!addToCart(idx)) return;
   b.textContent='Added'; b.classList.add('added');
   if(!noAnim()) gsap.fromTo(b,{scale:1},{scale:.9,duration:.12,yoyo:true,repeat:1,ease:'power2.out'});
   flyToBag(card);
-  CART[idx]=(CART[idx]||0)+1; saveCart(); renderCart(); bumpBag();
   setTimeout(()=>{ b.textContent='Add'; b.classList.remove('added'); },1100);
     if(window.__pairOpen) window.__pairOpen(idx);
 }));
@@ -2418,6 +2510,18 @@ let r=null, mounted=true;
         when something new lands, and you will get first look at the limited runs.</p>
       <button type="button" class="msend" data-mclose>Close</button>
     </div>
+  </div>
+</div>
+
+<!-- Stock ceiling dialog. Deliberately the same component as the one on
+     /checkout so the customer meets one consistent message, not two. -->
+<div class="soscrim" id="stkScrim" hidden></div>
+<div class="somodal" id="stkModal" role="alertdialog" aria-modal="true"
+     aria-labelledby="stkTitle" aria-describedby="stkBody" hidden>
+  <div class="sobox">
+    <button class="sox" id="stkClose" type="button" aria-label="Close">&times;</button>
+    <h2 id="stkTitle">We&rsquo;re sorry.</h2>
+    <p id="stkBody"></p>
   </div>
 </div>
 </body>
