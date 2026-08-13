@@ -1006,7 +1006,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
           <p class="fl-sub">Sign up for updates and limited edition discounts</p>
           <div class="fl-pill">
             <form id="flForm" class="fl-form">
-              <input type="email" name="newsletter_email" id="em" placeholder="Your Email * " autocomplete="email" aria-label="Email address">
+              <input type="email" name="newsletter_email" id="em" placeholder="Your email address" autocomplete="email" aria-label="Email address">
               <input type="text" name="hp" tabindex="-1" autocomplete="off" aria-hidden="true"
                 style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
               <button type="submit" id="notify" aria-label="Subscribe"><svg width="15" height="15" viewBox="0 0 15 15" fill="none" class="fl-arrow" xmlns="http://www.w3.org/2000/svg"><path d="M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z" fill="#191C21" fill-rule="evenodd" clip-rule="evenodd"></path></svg></button>
@@ -1433,7 +1433,11 @@ renderCart();
   let PAIR_DONE=false;                       /* taken or dismissed this session */
   window.__pairIdx=PAIR_IDX;
   function pairOptions(justAdded){
-    return PAIR_IDX.filter(i=>String(i)!==String(justAdded) && !CART[i]);
+    // Stock is filtered HERE, not in the render. It used to be checked while
+    // building the list, after pairOpen had already decided there was
+    // something to show, so with the range sold out the dialog opened empty.
+    return PAIR_IDX.filter(i=>String(i)!==String(justAdded) && !CART[i]
+      && !soldOut(PRODUCTS[i]));
   }
   function pairClose(){
     const w=document.getElementById('upWrap');
@@ -1448,7 +1452,6 @@ renderCart();
     const list=document.getElementById('upList');
     list.innerHTML=opts.map(i=>{
       const p=PRODUCTS[i];
-      if(soldOut(p)) return '';
       return '<li class="up-item"><div class="up-shot"><img src="'+p.img+'" alt="'+p.n+'"></div>'+
              '<div class="up-txt"><b>'+p.n+'</b><span>'+p.v+'</span><i>'+money(p.p)+'</i></div>'+
              '<button type="button" class="up-add" data-i="'+i+'">Add</button></li>';
@@ -1776,7 +1779,9 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         ${reviewBlock(p.slug)}
         <p class="md-desc">${p.long||p.d}</p>
         ${detailBlock(p.n)}
-        <button class="btn md-add" type="button">Add to bag</button>
+        ${soldOut(p)
+          ? '<button class="btn md-add" type="button" disabled>Sold out</button>'
+          : '<button class="btn md-add" type="button">Add to bag</button>'}
       </div>`;
     wrap.appendChild(dg);
     /* Mark's call: always the FIRST ingredient, even where the write-up is still
@@ -1802,7 +1807,16 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     cur={bd,wrap,dg,card};
     dg.querySelector('.md-close').addEventListener('click',close);
     bd.addEventListener('click',close);
-    dg.querySelector('.md-add').addEventListener('click',()=>{ const ci=[...document.querySelectorAll('.card')].find(c=>PRODUCTS[c.dataset.idx].n===p.n); if(ci){CART[ci.dataset.idx]=(CART[ci.dataset.idx]||0)+1; saveCart(); renderCart();} if(window.__bumpBag)window.__bumpBag(); close(); if(window.__pairOpen) setTimeout(()=>window.__pairOpen(ci?ci.dataset.idx:null),340); });
+    dg.querySelector('.md-add').addEventListener('click',()=>{
+      // MUST go through addToCart - it is the only place that checks stock.
+      // Writing to CART directly here let a sold-out product into the bag and
+      // the customer only found out at the final checkout click.
+      if(soldOut(p)) return;
+      const ci=[...document.querySelectorAll('.card')].find(c=>PRODUCTS[c.dataset.idx].n===p.n);
+      if(ci) addToCart(+ci.dataset.idx);
+      close();
+      if(window.__pairOpen) setTimeout(()=>window.__pairOpen(ci?ci.dataset.idx:null),340);
+    });
     const cr=card.getBoundingClientRect(), dr=dg.getBoundingClientRect();
     if(reduce || typeof gsap==='undefined'){ bd.style.opacity=1; return; }
     gsap.set(dg,{transformOrigin:'top left', x:cr.left-dr.left, y:cr.top-dr.top, scaleX:cr.width/dr.width, scaleY:cr.height/dr.height});
