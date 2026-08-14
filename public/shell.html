@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/png" href="/img/favicon.png">
+<!-- LCP preload.
+     #glassOverlay covers the whole viewport and is the largest paintable
+     element on the page, but it is painted from a CSS background-image. The
+     preload scanner cannot see those: the URL is only known once the 327 KB
+     <style> block has been parsed AND layout has matched the element, by
+     which point the request queues behind every eagerly-loaded <img> above.
+     The LCP resource was therefore the last thing discovered on a page
+     carrying ~2.4 MB of imagery. These two lines let the browser start it
+     immediately; `media` picks the same variant the CSS would. -->
+<link rel="preload" as="image" href="/img/halftone.jpg" fetchpriority="high"
+      media="(min-aspect-ratio: 4/5)">
+<link rel="preload" as="image" href="/img/halftone-portrait.jpg" fetchpriority="high"
+      media="(max-aspect-ratio: 4/5)">
 <title>Drewrys, premium haircare, with purpose.</title>
 <meta name="description" content="Drewrys, premium haircare, with purpose.">
 <link rel="canonical" href="https://drewrys.store/">
@@ -304,6 +317,9 @@ footer{background:var(--slate-2);color:var(--cream);padding-block:clamp(46px,6vw
 .bag .dot{transition:none}
 .pbtns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-start}
 .learn{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:.78rem;letter-spacing:.03em;text-transform:uppercase;padding:9px 15px;border-radius:30px;background:var(--peanut);color:var(--slate-2);transition:.18s;cursor:pointer;border:none}
+/* The server-rendered grid uses <a class="learn"> so the product pages are
+   reachable without JavaScript; the client swaps in a <button>. Same look. */
+a.learn{text-decoration:none}
 .learn:hover{background:var(--peanut-deep);color:var(--cotton)}
 /* morphing dialog */
 .md-backdrop{position:fixed;inset:0;background:rgba(20,23,27,.55);-webkit-backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);z-index:1000;opacity:0}
@@ -980,7 +996,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         </div>
         <div class="acr-panel" id="acr-1" role="region" aria-label="Oils that repair">
           <div class="acr-in">
-            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Marula"><span class="fg-img"><img src="/img/ing-marula.jpg" alt="Marula" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Marula</span><span class="fg-note">Adds shine and gloss. Repairs damaged hair</span></figcaption></figure><figure class="fg" data-ing="Baobab"><span class="fg-img"><img src="/img/ing-baobab.jpg" alt="Baobab" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Baobab</span><span class="fg-note">Strengthens roots. Rich in Omega 3 & vitamins, including Vitamin C</span></figcaption></figure><figure class="fg" data-ing="Prickly Pear"><span class="fg-img"><img src="/img/ing-prickly-pear.jpg" alt="Prickly Pear" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Prickly Pear</span><span class="fg-note">For scalp health. Hydrating, retains moisture</span></figcaption></figure><figure class="fg" data-ing="Kalahari Melon"><span class="fg-img"><img src="/img/ing-kalahari-melon.jpg" alt="Kalahari Melon" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Kalahari Melon</span><span class="fg-note">Soothing and hydrating. Rich in Omega-6 & Omega-9</span></figcaption></figure><figure class="fg" data-ing="Shea Butter"><span class="fg-img"><img src="/img/ing-shea-butter.jpg" alt="Shea Butter" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Shea Butter</span><span class="fg-note">Moisturising. Repairs damaged ends</span></figcaption></figure><figure class="fg" data-ing="Soybean"><span class="fg-img"><img src="/img/ing-soybean.jpg" alt="Soybean" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Soybean</span><span class="fg-note">Rich in omega fatty acids & vitamin E. Hydrating</span></figcaption></figure></div>
+            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Marula"><span class="fg-img"><img src="/img/ing-marula.jpg" alt="Marula" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Marula</span><span class="fg-note">Adds shine and gloss. Repairs damaged hair</span></figcaption></figure><figure class="fg" data-ing="Baobab"><span class="fg-img"><img src="/img/ing-baobab.jpg" alt="Baobab" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Baobab</span><span class="fg-note">Strengthens roots. Rich in Omega 3 & vitamins, including Vitamin C</span></figcaption></figure><figure class="fg" data-ing="Prickly Pear"><span class="fg-img"><img src="/img/ing-prickly-pear.jpg" alt="Prickly Pear" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Prickly Pear</span><span class="fg-note">For scalp health. Hydrating, retains moisture</span></figcaption></figure><figure class="fg" data-ing="Kalahari Melon"><span class="fg-img"><img src="/img/ing-kalahari-melon.jpg" alt="Kalahari Melon" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Kalahari Melon</span><span class="fg-note">Soothing and hydrating. Rich in Omega-6 & Omega-9</span></figcaption></figure><figure class="fg" data-ing="Shea Butter"><span class="fg-img"><img src="/img/ing-shea-butter.jpg" alt="Shea Butter" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Shea Butter</span><span class="fg-note">Moisturising. Repairs damaged ends</span></figcaption></figure><figure class="fg" data-ing="Soybean"><span class="fg-img"><img src="/img/ing-soybean.jpg" alt="Soybean" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Soybean</span><span class="fg-note">Rich in omega fatty acids & vitamin E. Hydrating</span></figcaption></figure></div>
           </div>
         </div>
       </article>
@@ -994,7 +1010,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         </div>
         <div class="acr-panel" id="acr-2" role="region" aria-label="Botanicals that balance">
           <div class="acr-in">
-            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Nutmeg"><span class="fg-img"><img src="/img/ing-nutmeg.jpg" alt="Nutmeg" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Nutmeg</span><span class="fg-note">Nourishes from root to tip. Antioxidant</span></figcaption></figure><figure class="fg" data-ing="Neroli"><span class="fg-img"><img src="/img/ing-neroli.jpg" alt="Neroli" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Neroli</span><span class="fg-note">Lightweight conditioner. Revitalising</span></figcaption></figure><figure class="fg" data-ing="Bergamot"><span class="fg-img"><img src="/img/ing-bergamot.jpg" alt="Bergamot" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Bergamot</span><span class="fg-note">Conditions & tames. Smooths</span></figcaption></figure><figure class="fg" data-ing="Turmeric"><span class="fg-img"><img src="/img/ing-turmeric.jpg" alt="Turmeric" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Turmeric</span><span class="fg-note">Promotes scalp health. Strong hair growth</span></figcaption></figure></div>
+            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Nutmeg"><span class="fg-img"><img src="/img/ing-nutmeg.jpg" alt="Nutmeg" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Nutmeg</span><span class="fg-note">Nourishes from root to tip. Antioxidant</span></figcaption></figure><figure class="fg" data-ing="Neroli"><span class="fg-img"><img src="/img/ing-neroli.jpg" alt="Neroli" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Neroli</span><span class="fg-note">Lightweight conditioner. Revitalising</span></figcaption></figure><figure class="fg" data-ing="Bergamot"><span class="fg-img"><img src="/img/ing-bergamot.jpg" alt="Bergamot" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Bergamot</span><span class="fg-note">Conditions & tames. Smooths</span></figcaption></figure><figure class="fg" data-ing="Turmeric"><span class="fg-img"><img src="/img/ing-turmeric.jpg" alt="Turmeric" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Turmeric</span><span class="fg-note">Promotes scalp health. Strong hair growth</span></figcaption></figure></div>
           </div>
         </div>
       </article>
@@ -1008,7 +1024,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
         </div>
         <div class="acr-panel" id="acr-3" role="region" aria-label="Texture and scent">
           <div class="acr-in">
-            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Maris Sal"><span class="fg-img"><img src="/img/ing-maris-sal.jpg" alt="Maris Sal" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Maris Sal</span><span class="fg-note">Grip and separation. Matte, beach-worn texture</span></figcaption></figure><figure class="fg" data-ing="Bitter Orange"><span class="fg-img"><img src="/img/ing-bitter-orange.jpg" alt="Bitter Orange" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Bitter Orange</span><span class="fg-note">Soothes and conditions. Calms itchy, dry scalps</span></figcaption></figure><figure class="fg" data-ing="Pistachio"><span class="fg-img"><img src="/img/ing-pistachio.jpg" alt="Pistachio" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Pistachio</span><span class="fg-note">Softens and nourishes. Rich in vitamin E</span></figcaption></figure><figure class="fg" data-ing="Amber"><span class="fg-img"><img src="/img/ing-amber.jpg" alt="Amber" decoding="sync"></span><figcaption class="fg-cap"><span class="fg-name">Amber</span><span class="fg-note">Warm resinous base note. Grounds the scent</span></figcaption></figure></div>
+            <div class="acr-rail" tabindex="0"><figure class="fg" data-ing="Maris Sal"><span class="fg-img"><img src="/img/ing-maris-sal.jpg" alt="Maris Sal" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Maris Sal</span><span class="fg-note">Grip and separation. Matte, beach-worn texture</span></figcaption></figure><figure class="fg" data-ing="Bitter Orange"><span class="fg-img"><img src="/img/ing-bitter-orange.jpg" alt="Bitter Orange" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Bitter Orange</span><span class="fg-note">Soothes and conditions. Calms itchy, dry scalps</span></figcaption></figure><figure class="fg" data-ing="Pistachio"><span class="fg-img"><img src="/img/ing-pistachio.jpg" alt="Pistachio" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Pistachio</span><span class="fg-note">Softens and nourishes. Rich in vitamin E</span></figcaption></figure><figure class="fg" data-ing="Amber"><span class="fg-img"><img src="/img/ing-amber.jpg" alt="Amber" loading="lazy" decoding="async"></span><figcaption class="fg-cap"><span class="fg-name">Amber</span><span class="fg-note">Warm resinous base note. Grounds the scent</span></figcaption></figure></div>
           </div>
         </div>
       </article>
@@ -1019,7 +1035,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 <section class="founder" id="story">
   <div class="wrap founder-in">
     <figure>
-      <img src="/img/story.jpg" alt="Ben Drewry cutting hair at Drewrys">
+      <img src="/img/story.jpg" alt="Ben Drewry cutting hair at Drewrys" loading="lazy" decoding="async">
     </figure>
     <div>
       
@@ -1091,12 +1107,19 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       <div class="fl-links">
         <ul>
           <li class="fl-lh">SITEMAP</li>
-          <li><a href="#top">Home</a></li>
-          <li><a href="#shop">Shop</a></li>
-          <li><a href="#story">Story</a></li>
-          <li><a href="#wholesale">Wholesale</a></li>
+          <li><a href="/">Home</a></li>
+          <li><a href="/shop">Shop</a></li>
+          <li><a href="/ingredients">Ingredients</a></li>
+          <li><a href="/about">Our story</a></li>
+          <li><a href="/wholesale">Wholesale</a></li>
+          <li><a href="/stockists">Where to buy</a></li>
           <li><a href="#" id="flContact">Contact</a></li>
         </ul>
+        <!-- Every product, as a real crawlable link. The #shop grid above is
+             rebuilt by JS on load, so any href inside it is invisible to a
+             renderer; this list is static and is what actually carries the
+             internal link graph. Populated server-side by renderSite(). -->
+        <ul id="flProducts"></ul>
         <ul>
           <li class="fl-lh">SOCIAL</li>
           <li id="flIgLi" hidden><a href="#" id="flIg" target="_blank" rel="noreferrer noopener" class="u">Instagram</a></li>
@@ -1106,7 +1129,7 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
     </div>
     <div class="fl-band">
       <div id="flBrandBand" aria-label="by Drewrys">
-        <img class="flb-d fl-rise" src="/img/footer-d.png" alt="">
+        <img class="flb-d fl-rise" src="/img/footer-d.png" alt="" loading="lazy" decoding="async">
         <span class="flb-by fl-rise"><span class="by-word">by</span> Drewrys</span>
       </div>
     </div>
@@ -1169,7 +1192,17 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
 <script>
 
 (function(){
-  const items=['Matte Clay','Sea Salt Spray','Fibre','Paste','Crème','Form','Rejuvenating Shampoo','Elijah'];
+  /* Driven by the live catalogue, not a hardcoded list. The hardcoded one had
+     drifted: it still advertised "Elijah", a product that is not in the
+     catalogue and cannot be bought, on the most visible element of the page,
+     while the catalogue's eighth product was missing from it entirely. */
+  const __live=(window.__DREWRYS__&&window.__DREWRYS__.products||[])
+    .filter(p=>p.active!==false).map(p=>p.name);
+  /* Fallback keeps the marquee populated if the catalogue ever fails to
+     inject; the old hardcoded list was the only thing feeding it, so losing
+     it entirely would leave a visibly empty band. */
+  const items=__live.length?__live
+    :['Matte Clay','Sea Salt Spray','Fibre','Paste','Crème','Form','Rejuvenating Shampoo'];
   const track=document.getElementById('ticker');
   if(!track) return;
   const one=items.map(function(i){
@@ -1311,7 +1344,7 @@ document.addEventListener('click',e=>{
 const grid=document.getElementById('grid');
 grid.innerHTML=PRODUCTS.map((p,i)=>`
   <article class="card${soldOut(p)?' is-sold':''}" data-idx="${i}">
-    <div class="shot">${soldOut(p)?'<span class="tag tag--out">Sold out</span>':(p.tag?`<span class="tag">${p.tag}</span>`:'')}<img class="pshot" src="${p.img}" alt="${p.n}"></div>
+    <div class="shot">${soldOut(p)?'<span class="tag tag--out">Sold out</span>':(p.tag?`<span class="tag">${p.tag}</span>`:'')}<img class="pshot" src="${p.img}" alt="${p.n}" width="600" height="600" loading="lazy" decoding="async"></div>
     <div class="meta">
       <h3 class="pname">${p.n}</h3>
       <p class="pvol">${p.v}</p>
