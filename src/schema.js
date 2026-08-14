@@ -120,7 +120,11 @@ function organisation(biz, settings) {
         { '@type': 'Country', name: 'Isle of Man' },
         { '@type': 'Country', name: 'United Kingdom' },
       ],
-      currenciesAccepted: 'GBP',
+      // NOTE: no currenciesAccepted / paymentAccepted / priceRange here.
+      // Those are LocalBusiness properties, and OnlineStore descends from
+      // Organization, not LocalBusiness — the schema.org validator flags them
+      // as unrecognised. They belong on the Store node below, which is a
+      // LocalBusiness, and they are set there.
       brand: { '@id': BRAND },
       hasMerchantReturnPolicy: { '@id': RETURNS },
       sameAs,
