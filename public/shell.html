@@ -1107,12 +1107,11 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
       <div class="fl-links">
         <ul>
           <li class="fl-lh">SITEMAP</li>
-          <li><a href="/">Home</a></li>
-          <li><a href="/shop">Shop</a></li>
-          <li><a href="/ingredients">Ingredients</a></li>
-          <li><a href="/about">Our story</a></li>
-          <li><a href="/wholesale">Wholesale</a></li>
-          <li><a href="/stockists">Where to buy</a></li>
+          <li><a href="#top">Home</a></li>
+          <li><a href="#shop">Shop</a></li>
+          <li><a href="#ingredients">Ingredients</a></li>
+          <li><a href="#story">Story</a></li>
+          <li><a href="#wholesale">Wholesale</a></li>
           <li><a href="#" id="flContact">Contact</a></li>
         </ul>
         <!-- Every product, as a real crawlable link. The #shop grid above is
@@ -2056,6 +2055,24 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* Back button closes the dialog rather than leaving the site. */
   window.addEventListener('popstate',()=>{ if(cur) close(true); });
+
+  /* Arriving with ?product=<slug> opens that tile. The footer's range list
+     uses it, so those links land on the homepage and open the card rather
+     than taking the visitor off to a separate page. */
+  (function(){
+    var want=new URLSearchParams(location.search).get('product');
+    if(!want) return;
+    var idx=PRODUCTS.findIndex(function(p){return p.slug===want;});
+    if(idx<0) return;
+    var card=document.querySelector('.card[data-idx="'+idx+'"]');
+    if(!card) return;
+    /* Wait for the shop section to be in view so the dialog morphs out of the
+       right tile rather than one still parked off-screen. */
+    setTimeout(function(){
+      card.scrollIntoView({block:'center'});
+      setTimeout(function(){ open(card,PRODUCTS[idx]); },260);
+    },140);
+  })();
 })();
 
 
