@@ -121,23 +121,62 @@ h3{font-size:19px;margin:1.6em 0 .4em}
 .card .stock{font-size:13px;color:var(--olive)}
 .card .stock.out{color:var(--peanut-deep)}
 
-.prod{display:grid;gap:40px;grid-template-columns:1fr;padding:40px 0 10px}
-@media(min-width:860px){.prod{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px}}
-.prod .media{background:var(--cream);border-radius:3px;aspect-ratio:1/1}
-.prod .media img{width:100%;height:100%;object-fit:cover}
-.prod .price{font-size:24px;font-weight:600;margin:0}
-.prod .meta{color:var(--olive);font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 14px}
-dl.spec{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:22px 0;font-size:15px}
-dl.spec dt{color:var(--olive)}
-dl.spec dd{margin:0}
-ul.steps{padding-left:20px;margin:10px 0 0}
-ul.steps li{margin:.45em 0}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;padding:0;list-style:none}
-.chips a{display:inline-block;font-size:14px;text-decoration:none;color:var(--slate);
-  border:1px solid var(--line);border-radius:20px;padding:5px 13px;background:#fff}
-.chips a:hover{border-color:var(--peanut);color:var(--peanut-deep)}
-.note{background:#fff;border:1px solid var(--line);border-left:3px solid var(--peanut);
-  padding:14px 18px;border-radius:2px;margin:22px 0;font-size:15.5px}
+/* ── product card, as a page ──────────────────────────────────────────────
+   These rules are lifted from shell.html's .md-* modal, not reinvented. The
+   product page IS the card the shop already opens — same cotton-2 panel, same
+   2:1 photo well, same NeueMontreal title, same tabs, same full-width dark
+   button — just laid out as a page instead of an overlay. Only the parts a
+   modal needs and a page does not (backdrop, close button, sticky footer
+   gradient) are dropped. */
+.card-pg{width:min(560px,100%);margin:clamp(20px,4vw,44px) auto 0;
+  background:var(--cotton-2);border:1px solid var(--line);border-radius:24px;
+  box-shadow:0 40px 90px -24px rgba(25,28,33,.28);overflow:hidden}
+.card-pg .media{position:relative;aspect-ratio:2/1;background:#f5f2f3;
+  display:grid;place-items:center;padding:6%;border-bottom:1px solid var(--line)}
+.card-pg .media img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.card-pg .tag{position:absolute;top:16px;left:16px;font-size:.6rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;border-radius:20px;
+  background:var(--slate);color:var(--cotton)}
+.card-pg .body{padding:clamp(18px,2.6vw,28px)}
+.card-pg h1{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
+  letter-spacing:-.01em;text-transform:uppercase;font-size:clamp(1.4rem,3vw,2rem);
+  line-height:1;color:var(--ink);margin:0}
+.card-pg .sub{font-weight:600;color:var(--peanut-deep);margin:8px 0 0;font-size:.9rem}
+.card-pg .desc{color:rgba(25,28,33,.82);margin-top:14px;line-height:1.6;font-size:.98rem}
+.card-pg h2{font-size:.78rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink);margin:22px 0 10px}
+.ings{display:flex;flex-wrap:wrap;gap:10px 12px;margin:14px 0 0;padding:0;list-style:none}
+.ings li{width:58px}
+.ings a{display:flex;flex-direction:column;align-items:center;gap:6px;text-decoration:none}
+.ing-chip{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(199,154,107,.14);border:1.5px solid transparent;transition:.15s}
+.ings a:hover .ing-chip{background:rgba(199,154,107,.18);border-color:var(--peanut-deep)}
+.ing-chip img{width:26px;height:26px}
+.ing-name{font-size:.68rem;text-align:center;color:var(--muted);line-height:1.15}
+.ings a:hover .ing-name{color:var(--ink)}
+.panel{margin:12px 0 4px;padding:14px 16px;background:rgba(25,28,33,.035);border-radius:14px}
+.panel ul{list-style:none;display:flex;flex-wrap:wrap;gap:4px 14px;margin:0;padding:0}
+.panel li{font-size:.78rem;color:var(--ink);position:relative;padding-left:12px}
+.panel li::before{content:"";position:absolute;left:0;top:.5em;width:5px;height:5px;
+  border-radius:50%;background:var(--peanut)}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{font-size:.95rem;line-height:1.62;color:rgba(25,28,33,.82);margin:.5em 0}
+.buy{display:flex;box-sizing:border-box;width:100%;justify-content:center;align-items:center;
+  margin:26px 0 0;border-radius:12px;padding:15px;background:var(--slate);color:var(--cotton);
+  font-weight:700;font-size:.82rem;letter-spacing:.02em;text-decoration:none;border:0;
+  cursor:pointer;font-family:inherit;
+  box-shadow:0 10px 26px -12px rgba(25,28,33,.6);transition:.18s}
+.buy:hover{background:var(--slate-2)}
+.buy[disabled],.buy[aria-disabled="true"]{background:var(--olive);box-shadow:none;
+  pointer-events:none}
+.spec{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;margin:20px 0 0;font-size:.85rem}
+.spec dt{color:var(--muted)}
+.spec dd{margin:0;color:var(--ink)}
+.backlink{display:inline-block;margin:0 0 4px;font-size:.72rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--peanut-deep);text-decoration:none;font-weight:700}
+.also{width:min(560px,100%);margin:clamp(34px,6vw,64px) auto 0}
+.also h2{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
+  text-transform:uppercase;letter-spacing:-.01em;font-size:1.05rem;margin:0 0 14px}
 
 .ing{display:grid;gap:22px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
   margin:26px 0 50px;padding:0;list-style:none}
@@ -377,15 +416,25 @@ export function shopPage({ products, stock, jsonld }) {
 /* ── /shop/<slug> ────────────────────────────────────────────────────────── */
 
 export function productPage({ product: p, stock: n, ingredients, related, jsonld }) {
-  const ingList = (p.ingredients || []).map((name) => {
+  /* Ingredient chips, exactly as the modal draws them: icon in a peanut
+     circle, name underneath. Here each one is a real link through to the
+     ingredient library rather than a JS panel toggle. */
+  const ingChips = (p.ingredients || []).map((name) => {
     const known = ingredients.find((i) => i.name === name);
     const slug = known ? known.slug : name.toLowerCase().replace(/\s+/g, '-');
-    return `<li><a href="/ingredients#${esc(slug)}">${esc(name)}</a></li>`;
+    const icon = known && known.icon ? known.icon : '';
+    return `<li><a href="/ingredients#${esc(slug)}">
+      <span class="ing-chip">${icon
+        ? `<img src="${esc(icon)}" alt="" width="26" height="26" loading="lazy">` : ''}</span>
+      <span class="ing-name">${esc(name)}</span>
+    </a></li>`;
   }).join('');
 
   const steps = (p.howto || []).map((s) => `<li>${esc(s)}</li>`).join('');
+  const sold = n !== null && n !== undefined && n <= 0;
 
-  const relatedCards = related.map((r) => `<li class="card">
+  /* "Pairs well with", drawn as the same card so the page reads as one piece. */
+  const alsoCards = related.map((r) => `<li class="card">
       <a class="shot" href="/shop/${esc(r.slug)}">
         <img src="${esc(r.image || '/img/share.jpg')}" alt="${esc(r.name)}"
              width="600" height="600" loading="lazy" decoding="async">
@@ -397,55 +446,48 @@ export function productPage({ product: p, stock: n, ingredients, related, jsonld
       </div>
     </li>`).join('');
 
-  const sold = n !== null && n !== undefined && n <= 0;
-
   return shellPage({
     title: `${p.name}${p.size ? ', ' + p.size : ''} — ${p.tagline || 'Drewrys'} | Drewrys`,
     description: (p.description || p.tagline || '').slice(0, 155),
     path: `/shop/${p.slug}`,
     ogImage: p.image ? ORIGIN + p.image : '',
     jsonld,
-    body: `<article class="prod">
+    body: `<article class="card-pg">
       <div class="media">
+        ${sold ? '<span class="tag">Sold out</span>'
+               : (p.badge ? `<span class="tag">${esc(p.badge)}</span>` : '')}
         <img src="${esc(p.image || '/img/share.jpg')}" alt="${esc(p.name)}, ${esc(p.size || '')}"
              width="900" height="900" fetchpriority="high" decoding="async">
       </div>
-      <div>
-        <p class="pg-eyebrow"><a href="/shop">Shop</a> — ${esc(p.size || '')}</p>
+      <div class="body">
+        <a class="backlink" href="/shop">← The range</a>
         <h1>${esc(p.name)}</h1>
-        <p class="meta">${esc(p.tagline || '')}</p>
-        <p class="price">${gbp(p.price_pence)} ${sold
-          ? '<span class="stock out" style="font-size:15px">Sold out</span>'
-          : stockLine(n)}</p>
-        <p>${esc(p.description || '')}</p>
+        <p class="sub">${gbp(p.price_pence)} &middot; ${esc((p.size || '').toUpperCase())}</p>
+        <p class="desc">${esc(p.description || p.tagline || '')}</p>
 
-        <p class="pg-cta">
-          ${sold
-            ? '<a class="btn" aria-disabled="true" href="/shop">Sold out</a>'
-            : `<a class="btn" href="/#shop">Add to bag</a>`}
-          <a class="btn btn--ghost" href="/shop">See the range</a>
-        </p>
+        ${ingChips ? `<h2>Ingredients</h2>
+        <ul class="ings">${ingChips}</ul>` : ''}
+
+        ${steps ? `<h2>How to use</h2>
+        <div class="panel"><ul class="steps">${steps}</ul></div>` : ''}
 
         <dl class="spec">
           <dt>Size</dt><dd>${esc(p.size || '—')}</dd>
           <dt>Made in</dt><dd>United Kingdom</dd>
-          <dt>Delivery</dt><dd>Free collection in Douglas · Isle of Man £2.50 · UK &amp; Channel Islands £4.50 · free over £40</dd>
+          <dt>Delivery</dt><dd>Free collection in Douglas · Isle of Man £2.50 ·
+            UK &amp; Channel Islands £4.50 · free over £40</dd>
           <dt>Returns</dt><dd><a href="/returns">14 days</a>, unopened</dd>
         </dl>
 
-        ${ingList ? `<h2>What is in it</h2>
-        <ul class="chips">${ingList}</ul>
-        <p class="note">Full INCI ingredient list is printed on the pack. If you have a
-          known sensitivity, check it before use, or email
-          <a href="mailto:${esc(BIZ.email)}">${esc(BIZ.email)}</a> and we will send it over.</p>` : ''}
-
-        ${steps ? `<h2>How to use it</h2><ul class="steps">${steps}</ul>` : ''}
+        ${sold
+          ? '<span class="buy" aria-disabled="true">Sold out</span>'
+          : '<a class="buy" href="/#shop">Add to bag</a>'}
       </div>
     </article>
 
-    ${relatedCards ? `<section class="pg">
+    ${alsoCards ? `<section class="also">
       <h2>Pairs well with</h2>
-      <ul class="grid">${relatedCards}</ul>
+      <ul class="grid">${alsoCards}</ul>
     </section>` : ''}`,
   });
 }
