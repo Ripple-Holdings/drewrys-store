@@ -1349,7 +1349,7 @@ grid.innerHTML=PRODUCTS.map((p,i)=>`
       <h3 class="pname">${p.n}</h3>
       <p class="pvol">${p.v}</p>
       <p class="pdesc">${p.d}</p>${lowStock(p)?`<p class="plow">Only ${p.stock} left</p>`:''}
-      <div class="prow"><span class="price">${money(p.p)}</span><div class="pbtns"><button class="learn" type="button">Learn more</button>${soldOut(p)?'<button class="add add--out" disabled>Sold out</button>':'<button class="add">Add</button>'}</div></div>
+      <div class="prow"><span class="price">${money(p.p)}</span><div class="pbtns"><a class="learn" href="/shop/${p.slug}">Learn more</a>${soldOut(p)?'<button class="add add--out" disabled>Sold out</button>':'<button class="add">Add</button>'}</div></div>
     </div>
   </article>`).join('');
 
@@ -1997,8 +1997,11 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const bd=document.createElement('div'); bd.className='md-backdrop'; document.body.appendChild(bd);
     const {wrap,dg}=build(p,card); document.body.appendChild(wrap);
     cur={bd,wrap,dg,card};
-    dg.querySelector('.md-close').addEventListener('click',close);
-    bd.addEventListener('click',close);
+    /* Wrapped, not passed directly: close(fromPop) would otherwise receive the
+       click event as its argument, read it as truthy, and skip restoring the
+       URL — leaving /shop/<slug> in the address bar after the dialog closed. */
+    dg.querySelector('.md-close').addEventListener('click',()=>close());
+    bd.addEventListener('click',()=>close());
     dg.querySelector('.md-add').addEventListener('click',()=>{
       // MUST go through addToCart - it is the only place that checks stock.
       // Writing to CART directly here let a sold-out product into the bag and
@@ -2016,8 +2019,14 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{x:0,y:0,scaleX:1,scaleY:1,duration:.42,ease:'power3.out'});
     gsap.from(dg.querySelectorAll('.md-body>*'),{opacity:0,y:8,duration:.3,delay:.16,stagger:.03,ease:'power2.out'});
   }
-  function close(){
+  /* fromPop is true when the browser's back button triggered this, in which
+     case the history entry has already gone and popping it again would send
+     the visitor off the site. */
+  function close(fromPop){
     if(!cur) return; const {bd,wrap,dg,card}=cur; cur=null;
+    if(!fromPop && history.state && history.state.drwProduct){
+      try{ history.back(); }catch(_){}
+    }
     const done=()=>{bd.remove();wrap.remove();};
     if(reduce || typeof gsap==='undefined'){ done(); return; }
     const cr=card.getBoundingClientRect(), dr=dg.getBoundingClientRect();
@@ -2025,11 +2034,28 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{transformOrigin:'top left', x:cr.left-dr.left, y:cr.top-dr.top, scaleX:cr.width/dr.width, scaleY:cr.height/dr.height, opacity:.5, duration:.36, ease:'power3.in', onComplete:done});
   }
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+  /* "Learn more" is a real <a href="/shop/slug"> that opens the dialog instead
+     of navigating. The link is the truth; the dialog is the nicer version of
+     it layered on top.
+
+     pushState gives the open dialog its own address, so the URL bar, the back
+     button, refresh and "copy link" all behave the way people expect from a
+     product page — while the dialog itself is untouched.
+
+     Cmd/ctrl/middle click fall through to the browser and load the real page,
+     which is also what Googlebot gets, since it never clicks anything. */
   document.querySelectorAll('.learn').forEach(btn=>btn.addEventListener('click',e=>{
+    if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.button!==0) return;  // let the browser have it
+    e.preventDefault();
     e.stopPropagation();
     const card=btn.closest('.card'); const p=PRODUCTS[+card.dataset.idx];
-    if(p) open(card,p);
+    if(!p) return;
+    open(card,p);
+    try{ history.pushState({drwProduct:p.slug},'','/shop/'+p.slug); }catch(_){}
   }));
+
+  /* Back button closes the dialog rather than leaving the site. */
+  window.addEventListener('popstate',()=>{ if(cur) close(true); });
 })();
 
 
