@@ -277,6 +277,13 @@ button.pill-danger:disabled{opacity:.6;cursor:default}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 td,th{text-align:left;padding:7px 6px;border-bottom:1px solid #f0e9dc}
 th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+/* Order card money summary. Right-aligned labels separate the totals from the
+   item rows above without needing a second table. */
+tr.tot td{color:var(--muted)}
+tr.tot td:first-child{text-align:right}
+tr.tot-disc td{color:var(--peanut-deep)}
+tr.tot-grand td{color:var(--ink);font-weight:700;border-bottom:0}
+tr.tot-grand td:first-child{text-transform:uppercase;font-size:11.5px;letter-spacing:.04em}
 
 .savebar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--ink);color:var(--cotton);
   padding:12px 18px;display:flex;align-items:center;gap:11px;
@@ -721,6 +728,41 @@ function render(){
       'shown after adding to bag; turn it off here and the offer stops appearing.</div>';
   }
 
+  /* The card listed the item lines and then jumped straight to the header
+     total, so any order carrying a discount or a delivery charge looked like
+     it had been charged the wrong amount - the lines said one figure and the
+     header said another, with nothing in between to explain the gap.
+     Every one of these numbers is already on the order record: priceBasket
+     returns subtotal, discount, shipping and total, and /create-session
+     spreads the whole basket onto it. Nothing here is recomputed in the
+     browser - a total worked out client-side could disagree with what Teya
+     actually took, and the header figure is the charged one. */
+  function orderTotals(o){
+    var lineSum=(o.items||[]).reduce(function(n,i){
+      return n+(Number(i.unit_amount)||0)*(Number(i.quantity)||0);},0);
+    // Fall back to the line sum only when the field is genuinely absent, which
+    // is the shape of an order parked before subtotal was stored.
+    var sub=(o.subtotal===undefined||o.subtotal===null)?lineSum:Number(o.subtotal);
+    var disc=Number(o.discount)||0;
+    var ship=Number(o.shipping)||0;
+    var collect=(o.fulfilment||o.fulfillment)==='collect';
+    var row=function(label,value,cls){
+      return '<tr class="tot'+(cls?' '+cls:'')+'"><td colspan="2">'+label+'</td>'+
+             '<td>'+value+'</td></tr>';
+    };
+    var h=row('Subtotal','£'+pounds(sub));
+    if(disc>0){
+      h+=row('Discount'+(o.promo?' &middot; '+esc(o.promo):''),
+             '&minus;£'+pounds(disc),'tot-disc');
+    }
+    // Collection is free and has no method, so say so rather than showing a
+    // bare £0.00 that reads like a missing charge.
+    h+=row('Delivery', collect ? 'Collection'
+      : (ship>0 ? '£'+pounds(ship) : 'Free'));
+    h+=row('Total','£'+pounds(o.total),'tot-grand');
+    return h;
+  }
+
   if(tab==='orders'){
     var OPEN={paid:1,ready:1};
     var pend=S.orders.filter(function(o){return OPEN[o.status];});
@@ -761,6 +803,7 @@ function render(){
         '<table><tr><th>Item</th><th>Qty</th><th>Line</th></tr>'+
         (o.items||[]).map(function(i){return '<tr><td>'+esc(i.name)+'</td><td>'+i.quantity+
           '</td><td>£'+pounds(i.unit_amount*i.quantity)+'</td></tr>';}).join('')+
+        orderTotals(o)+
         '</table>'+
         '<label>'+(collect?'Customer':'Deliver to')+'</label>'+
         '<div class="addr">'+esc((o.customer||{}).name||'-')+'<br>'+
