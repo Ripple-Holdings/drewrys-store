@@ -46,14 +46,29 @@ export const BIZ = {
   email: 'hello@drewrys.store',
 };
 
+/**
+ * Tokens copied verbatim from public/shell.html rather than eyeballed, so
+ * these pages cannot drift from the storefront:
+ *   --cotton  #F3EDE1  the page background
+ *   --ink     #191C21  body text
+ *   --slate   #2B3037  button fill
+ *   --peanut  #C79A6B / --peanut-deep #9A6C3E  accents
+ *
+ * Type matches the shop too: NeueMontreal for display (shell.html calls it
+ * .disp — uppercase, 500, tight leading), Geist for body. Both come from
+ * /fonts.css, which is already deployed and is now cached for a year.
+ */
 const CSS = `
-:root{--cotton:#F3EDE1;--cream:#E7DABF;--ink:#191C21;--slate:#2B3037;
-  --olive:#94876d;--peanut:#C79A6B;--peanut-deep:#9A6C3E;--line:#ddd2ba}
+:root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--cream:#E7DABF;--ink:#191C21;
+  --slate:#2B3037;--slate-2:#20242A;--olive:#94876d;--peanut:#C79A6B;
+  --peanut-deep:#9A6C3E;--line:rgba(25,28,33,.16);--muted:rgba(25,28,33,.55)}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--cotton);color:var(--ink);
-  font:17px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font:17px/1.65 "Geist",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased}
+h1,h2,h3,.disp{font-family:"NeueMontreal","Geist",system-ui,sans-serif;
+  font-weight:500;letter-spacing:-.014em}
 a{color:var(--peanut-deep)}
 a:focus-visible,button:focus-visible{outline:2px solid var(--peanut-deep);outline-offset:2px}
 img{max-width:100%;height:auto;display:block}
@@ -78,10 +93,15 @@ h2{font-size:clamp(21px,3vw,27px);line-height:1.25;margin:2em 0 .5em;text-wrap:b
 h3{font-size:19px;margin:1.6em 0 .4em}
 .lede{font-size:19px;color:var(--slate)}
 .pg-cta{display:flex;gap:12px;flex-wrap:wrap;margin:26px 0}
-.btn{display:inline-block;background:var(--ink);color:var(--cotton);
-  text-decoration:none;padding:13px 22px;border-radius:2px;font-size:15px;
-  letter-spacing:.02em}
+/* Same button as the storefront: shell.html's .btn is slate on cotton, 700,
+   .82rem, .02em tracking, 40px radius. Copied, not approximated. */
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--slate);
+  color:var(--cotton);text-decoration:none;font-weight:700;font-size:.82rem;
+  letter-spacing:.02em;padding:11px 20px;border-radius:40px;
+  transition:transform .18s ease,background .18s ease}
+.btn:hover{background:var(--slate-2);transform:translateY(-1px)}
 .btn--ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.btn--ghost:hover{background:rgba(25,28,33,.06)}
 .btn[aria-disabled="true"]{background:var(--olive);pointer-events:none}
 
 .grid{display:grid;gap:26px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));
@@ -177,6 +197,7 @@ function footer() {
         <h2>Company</h2>
         <ul>
           <li><a href="/about">Our story</a></li>
+          <li><a href="https://drewrys.im/">The barbershop</a></li>
           <li><a href="/terms">Terms</a></li>
           <li><a href="/returns">Returns</a></li>
           <li><a href="/privacy">Privacy</a></li>
@@ -240,6 +261,7 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(img)}">
 <meta name="theme-color" content="#F3EDE1">
+<link rel="stylesheet" href="/fonts.css">
 <style>${CSS}</style>
 ${jsonld ? `<script type="application/ld+json">${jsonld}</script>` : ''}
 </head>
@@ -249,6 +271,57 @@ ${header()}
 ${body}
 </main>
 ${footer()}
+</body>
+</html>`;
+}
+
+/* ── 404 ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * Deliberately not built on shellPage(): no nav, no footer, no body copy.
+ *
+ * A 404 is noindex, so it earns nothing in search however much is on it. Its
+ * only job is to stop a person leaving. Everything that does not serve that
+ * is noise, and the previous version — an email address, two buttons, a full
+ * nav and a four-column footer — was mostly noise.
+ *
+ * The D mark, the number, one button.
+ */
+export function notFoundPage() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found · Drewrys</title>
+<meta name="robots" content="noindex,follow">
+<link rel="icon" type="image/png" href="/img/favicon.png">
+<link rel="stylesheet" href="/fonts.css">
+<meta name="theme-color" content="#F3EDE1">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:#F3EDE1;color:#191C21;
+  font:17px/1.55 "Geist",system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:32px;gap:clamp(20px,4vh,40px)}
+.mark{width:clamp(84px,11vw,124px);height:auto;display:block}
+.code{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
+  font-size:clamp(6rem,26vw,17rem);line-height:.82;letter-spacing:-.03em;
+  text-transform:uppercase;margin:0;color:#191C21}
+.home{display:inline-flex;align-items:center;gap:8px;background:#2B3037;
+  color:#F3EDE1;text-decoration:none;font-weight:700;font-size:.82rem;
+  letter-spacing:.02em;padding:11px 20px;border-radius:40px;
+  transition:transform .18s ease,background .18s ease}
+.home:hover{background:#20242A;transform:translateY(-1px)}
+.home:focus-visible{outline:2px solid #9A6C3E;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.home{transition:none}}
+</style>
+</head>
+<body>
+<img class="mark" src="/img/logo-d.png" alt="Drewrys" width="440" height="440">
+<p class="code">404</p>
+<a class="home" href="/">Home</a>
 </body>
 </html>`;
 }
@@ -457,6 +530,10 @@ export function aboutPage({ jsonld }) {
         ${esc(BIZ.country)} ${esc(BIZ.postcode)}. You can
         <a href="/stockists">collect an order for free</a>, or
         <a href="tel:${esc(BIZ.phone.replace(/\s/g, ''))}">call ${esc(BIZ.phoneDisplay)}</a>.</p>
+
+      <p>For a cut rather than a jar, the barbershop is
+        <a href="https://drewrys.im/">Drewry's in Douglas</a> — same people, and
+        where every one of these products was tested before it went on sale.</p>
 
       <p class="pg-cta"><a class="btn" href="/shop">Shop the range</a>
         <a class="btn btn--ghost" href="/wholesale">Stock Drewrys</a></p>

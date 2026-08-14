@@ -68,7 +68,25 @@ function availability(n) {
  * both into one node means misrepresenting one of them.
  */
 function organisation(biz, settings) {
+  /**
+   * sameAs is how you tell a search engine "these URLs are all the same
+   * entity". It is a declaration, not a verified claim, so it does not
+   * require controlling the other domain.
+   *
+   * drewrys.im matters most here. It is the barbershop: trading since 2014,
+   * an established local reputation, and citations across the Manx
+   * directories. drewrys.store is the same business selling its own range on
+   * its own domain, and until these two are connected the shop competes for
+   * its own brand name against both the barbershop and an unrelated American
+   * brewery, with no authority of its own.
+   *
+   * Keeping them as separate domains is deliberate: .im is a genuine
+   * country-coded TLD and carries an Isle of Man signal that suits a local
+   * service business but works against a shop selling into mainland UK.
+   * The split is right; the disconnect was not.
+   */
   const sameAs = [
+    settings.barbershop_url || 'https://drewrys.im/',
     settings.instagram_url || 'https://www.instagram.com/drewrys_haircare/',
     settings.facebook_url || 'https://www.facebook.com/drewrys',
   ].filter(Boolean);

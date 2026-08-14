@@ -34,7 +34,7 @@ import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js'
 import { vatForOrder, vatReport, vatPeriods, vatSettings, sellingPrice } from './vat.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
-import { BIZ, shellPage, shopPage, productPage, ingredientsPage,
+import { BIZ, shellPage, notFoundPage, shopPage, productPage, ingredientsPage,
          aboutPage, wholesalePage, stockistsPage } from './pages.js';
 import { homeGraph, shopGraph, productGraph, pageGraph } from './schema.js';
 
@@ -475,20 +475,7 @@ ${urls.map((u) => `  <url>
  * back.
  */
 function notFound() {
-  return html(shellPage({
-    title: 'Page not found · Drewrys',
-    description: 'That page does not exist. Browse the Drewrys range instead.',
-    path: '/404',
-    noindex: true,
-    body: `<section class="pg pg--narrow">
-      <p class="pg-eyebrow">404</p>
-      <h1>That page has moved, or never existed.</h1>
-      <p>Nothing here. The range is a click away, or email
-        <a href="mailto:hello@drewrys.store">hello@drewrys.store</a> and we will point you at it.</p>
-      <p class="pg-cta"><a class="btn" href="/shop">Shop the range</a>
-        <a class="btn btn--ghost" href="/">Home</a></p>
-    </section>`,
-  }), 404);
+  return html(notFoundPage(), 404);
 }
 
 /* ── orders ──────────────────────────────────────────────────────────────── */
