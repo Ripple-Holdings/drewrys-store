@@ -34,8 +34,8 @@ import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js'
 import { vatForOrder, vatReport, vatPeriods, vatSettings, sellingPrice } from './vat.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
-import { BIZ, shellPage, notFoundPage, productPage } from './pages.js';
-import { homeGraph, productGraph } from './schema.js';
+import { notFoundPage } from './pages.js';
+import { BIZ, homeGraph, productGraph } from './schema.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -142,7 +142,17 @@ async function stockMap(env, products) {
   return out;
 }
 
-async function renderSite(request, env) {
+/**
+ * The storefront.
+ *
+ * `openSlug` is set when the request arrived on /shop/<slug>. The same page is
+ * returned with that product's dialog opened on load, and with the title,
+ * description, canonical, social tags and structured data swapped to that one
+ * product. So the product URL is the shop with the card open — identical to
+ * what you get clicking "Learn more", whether you arrive from the grid or from
+ * a search result.
+ */
+async function renderSite(request, env, openSlug = '') {
   const res = await env.ASSETS.fetch(new URL('/shell.html', request.url));
   if (!res.ok) return new Response('shell.html missing from public/', { status: 500 });
 
@@ -189,22 +199,43 @@ async function renderSite(request, env) {
     JSON.stringify(payload).replace(/</g, '\\u003c')
   };</script>`;
 
+  /* On /shop/<slug> the page is about that product, so the head and the
+     structured data describe it rather than the shop as a whole. */
+  const opened = openSlug ? live.find((p) => p.slug === openSlug) : null;
+
   /* Structured data. Generated from the same objects the page renders, so
      price and availability cannot drift from the shop. */
-  const graph = homeGraph({
-    biz: BIZ, settings, products: live, stock: payload.stock,
-    ratings: payload.ratings, freeOver: payload.free_over,
-  });
+  const graph = opened
+    ? productGraph({
+        biz: BIZ, settings, product: opened, stock: payload.stock[opened.slug],
+        ratings: payload.ratings, reviews: payload.reviews, freeOver: payload.free_over,
+      })
+    : homeGraph({
+        biz: BIZ, settings, products: live, stock: payload.stock,
+        ratings: payload.ratings, freeOver: payload.free_over,
+      });
   const ld = `<script type="application/ld+json">${graph}</script>`;
 
   /* The head that shipped said "Drewrys, premium haircare, with purpose." in
      both the title and the description — byte-identical, 40 characters, and
      naming no product category, no market and no location. Nobody searches
      for an abstract noun. */
-  const title = 'Drewrys — barber-made hair clay, paste &amp; sea salt spray, made in the UK';
-  const desc = 'Premium men’s haircare built by a barber with 15 years on the floor. '
-    + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
-    + 'botanical oils. Free UK delivery over £40.';
+  const title = opened
+    ? `${esc(opened.name)}${opened.size ? ', ' + esc(opened.size) : ''} — ${esc(opened.tagline || '')} | Drewrys`
+    : 'Drewrys — barber-made hair clay, paste &amp; sea salt spray, made in the UK';
+  const desc = opened
+    ? esc((opened.description || opened.tagline || '').slice(0, 155))
+    : 'Premium men’s haircare built by a barber with 15 years on the floor. '
+      + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
+      + 'botanical oils. Free UK delivery over £40.';
+  const canonical = opened ? `https://${CANONICAL_HOST}/shop/${esc(opened.slug)}`
+                           : `https://${CANONICAL_HOST}/`;
+  const shareImg = opened && opened.image ? `https://${CANONICAL_HOST}${esc(opened.image)}`
+                                          : `https://${CANONICAL_HOST}/img/share.jpg`;
+
+  /* Tells the page which card to open. Read once on load. */
+  const openTag = opened
+    ? `<script>window.__DREWRYS_OPEN__=${JSON.stringify(opened.slug)};</script>` : '';
 
   /* Straight to each product's page, same destination as the card's "Learn
      more". One product, one address, however you get there. */
@@ -241,13 +272,22 @@ async function renderSite(request, env) {
     .replace('<title>Drewrys, premium haircare, with purpose.</title>', `<title>${title}</title>`)
     .replace('<meta name="description" content="Drewrys, premium haircare, with purpose.">',
              `<meta name="description" content="${desc}">`)
+    .replace('<link rel="canonical" href="https://drewrys.store/">',
+             `<link rel="canonical" href="${canonical}">`)
+    .replace('<meta property="og:url" content="https://drewrys.store/">',
+             `<meta property="og:url" content="${canonical}">`)
+    .replace('<meta property="og:image" content="https://drewrys.store/img/share.jpg">',
+             `<meta property="og:image" content="${shareImg}">`)
+    .replace('<meta name="twitter:image" content="https://drewrys.store/img/share.jpg">',
+             `<meta name="twitter:image" content="${shareImg}">`)
     .replace('<meta property="og:title" content="Drewrys">',
-             '<meta property="og:title" content="Drewrys — barber-made haircare, made in the UK">')
+             `<meta property="og:title" content="${opened ? esc(opened.name) + ' · Drewrys'
+                                                          : 'Drewrys — barber-made haircare, made in the UK'}">`)
     .replace('<div class="grid" id="grid"></div>', `<div class="grid" id="grid">${gridHtml}</div>`)
     .replace('<ul id="flProducts"></ul>', `<ul id="flProducts">${productLinks}</ul>`);
 
   return html(body.includes('</head>')
-    ? body.replace('</head>', inject + ld + '</head>')
+    ? body.replace('</head>', inject + ld + openTag + '</head>')
     : inject + ld + body);
 }
 
@@ -275,54 +315,19 @@ async function renderCheckout(env) {
   }));
 }
 
-/* ── content pages ───────────────────────────────────────────────────────── */
-
 /**
- * Everything these pages need, gathered once.
+ * /shop/<slug> — the storefront with that product's card open.
  *
- * The homepage keeps its catalogue in a JS object and builds the grid on the
- * client, so a crawler that does not execute scripts sees a shop with no
- * products and no prices. These pages are the fix: real HTML, real URLs, one
- * product per page, which is also the only shape eligible for product rich
- * results.
+ * A separate product page was built and thrown away: it meant the same card
+ * existed in two designs, and the one people actually use is the dialog. The
+ * URL is real and its head and structured data describe the product; the page
+ * behind it is the shop.
  */
-async function shopContext(env) {
+async function renderProduct(request, env, slug) {
   const cat = await getCatalogue(env);
-  const settings = await getSettings(env);
-  const products = cat.products.filter((p) => p.active !== false)
-    .map((p) => ({ ...p, price_pence: sellingPrice(p, settings) }));
-  const allReviews = await getReviews(env);
-  return {
-    settings,
-    products,
-    stock: await stockMap(env, products),
-    ingredients: await getIngredients(env),
-    reviews: publishedReviews(allReviews),
-    ratings: ratingSummary(allReviews),
-    freeOver: settings.free_over || {},
-  };
-}
-
-async function renderProduct(env, slug) {
-  const c = await shopContext(env);
-  const product = c.products.find((p) => p.slug === slug);
-  if (!product) return notFound();
-
-  // "Pairs well with", the same three the upsell offers, minus this one and
-  // anything sold out — a cross-sell to something unbuyable is a dead end.
-  const related = c.products
-    .filter((p) => p.slug !== slug && (c.stock[p.slug] ?? 1) > 0)
-    .slice(0, 3);
-
-  return html(productPage({
-    product,
-    stock: c.stock[product.slug],
-    ingredients: c.ingredients,
-    related,
-    jsonld: productGraph({ biz: BIZ, settings: c.settings, product,
-                           stock: c.stock[product.slug], ratings: c.ratings,
-                           reviews: c.reviews, freeOver: c.freeOver }),
-  }));
+  const known = cat.products.some((p) => p.active !== false && p.slug === slug);
+  if (!known) return notFound();
+  return renderSite(request, env, slug);
 }
 
 
@@ -1487,7 +1492,7 @@ async function route(request, env, ctx, url, path) {
 
       // A real page per product, for search engines only.
       if (path.startsWith('/shop/')) {
-        return renderProduct(env, decodeURIComponent(path.slice(6)).replace(/\/+$/, ''));
+        return renderProduct(request, env, decodeURIComponent(path.slice(6)).replace(/\/+$/, ''));
       }
 
       if (path.startsWith('/review/share/')) return handleShare(env, path.slice(14));

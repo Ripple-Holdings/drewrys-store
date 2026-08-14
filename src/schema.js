@@ -22,6 +22,26 @@
  */
 
 const ORIGIN = 'https://drewrys.store';
+
+/**
+ * The trading identity, as filed. Everything here is public record and appears
+ * on /terms and /privacy; it is repeated in the structured data so a search
+ * engine can tie the site to a real, registered business rather than guessing.
+ */
+export const BIZ = {
+  legalName: 'DGG Limited',
+  tradingName: 'Drewrys',
+  company: '130898C',
+  vat: 'GB004838290',
+  street: 'Falcon House, 22 Ridgeway Street',
+  town: 'Douglas',
+  postcode: 'IM1 1EL',
+  country: 'Isle of Man',
+  phone: '+44 7624 373979',
+  phoneDisplay: '07624 373979',
+  email: 'hello@drewrys.store',
+};
+
 const ORG = `${ORIGIN}/#organization`;
 const BRAND = `${ORIGIN}/#brand`;
 const SHOP = `${ORIGIN}/#shop`;
