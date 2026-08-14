@@ -1342,7 +1342,7 @@ document.addEventListener('click',e=>{
 
 const grid=document.getElementById('grid');
 grid.innerHTML=PRODUCTS.map((p,i)=>`
-  <article class="card${soldOut(p)?' is-sold':''}" data-idx="${i}">
+  <article class="card${soldOut(p)?' is-sold':''}" id="p-${p.slug}" data-idx="${i}">
     <div class="shot">${soldOut(p)?'<span class="tag tag--out">Sold out</span>':(p.tag?`<span class="tag">${p.tag}</span>`:'')}<img class="pshot" src="${p.img}" alt="${p.n}" width="600" height="600" loading="lazy" decoding="async"></div>
     <div class="meta">
       <h3 class="pname">${p.n}</h3>
@@ -1996,9 +1996,6 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const bd=document.createElement('div'); bd.className='md-backdrop'; document.body.appendChild(bd);
     const {wrap,dg}=build(p,card); document.body.appendChild(wrap);
     cur={bd,wrap,dg,card};
-    /* Wrapped, not passed directly: close(fromPop) would otherwise receive the
-       click event as its argument, read it as truthy, and skip restoring the
-       URL — leaving /shop/<slug> in the address bar after the dialog closed. */
     dg.querySelector('.md-close').addEventListener('click',()=>close());
     bd.addEventListener('click',()=>close());
     dg.querySelector('.md-add').addEventListener('click',()=>{
@@ -2018,14 +2015,8 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{x:0,y:0,scaleX:1,scaleY:1,duration:.42,ease:'power3.out'});
     gsap.from(dg.querySelectorAll('.md-body>*'),{opacity:0,y:8,duration:.3,delay:.16,stagger:.03,ease:'power2.out'});
   }
-  /* fromPop is true when the browser's back button triggered this, in which
-     case the history entry has already gone and popping it again would send
-     the visitor off the site. */
-  function close(fromPop){
+  function close(){
     if(!cur) return; const {bd,wrap,dg,card}=cur; cur=null;
-    if(!fromPop && history.state && history.state.drwProduct){
-      try{ history.back(); }catch(_){}
-    }
     const done=()=>{bd.remove();wrap.remove();};
     if(reduce || typeof gsap==='undefined'){ done(); return; }
     const cr=card.getBoundingClientRect(), dr=dg.getBoundingClientRect();
@@ -2033,45 +2024,36 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{transformOrigin:'top left', x:cr.left-dr.left, y:cr.top-dr.top, scaleX:cr.width/dr.width, scaleY:cr.height/dr.height, opacity:.5, duration:.36, ease:'power3.in', onComplete:done});
   }
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
-  /* "Learn more" is a real <a href="/shop/slug"> that opens the dialog instead
-     of navigating. The link is the truth; the dialog is the nicer version of
-     it layered on top.
+  /* "Learn more" is a plain link to the product's own page. It used to open
+     the dialog and rewrite the URL, which meant the same card existed in two
+     places; the page is the card now, so the link just goes there. open() is
+     still used by the "pairs well with" upsell. */
 
-     pushState gives the open dialog its own address, so the URL bar, the back
-     button, refresh and "copy link" all behave the way people expect from a
-     product page — while the dialog itself is untouched.
-
-     Cmd/ctrl/middle click fall through to the browser and load the real page,
-     which is also what Googlebot gets, since it never clicks anything. */
-  document.querySelectorAll('.learn').forEach(btn=>btn.addEventListener('click',e=>{
-    if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.button!==0) return;  // let the browser have it
-    e.preventDefault();
-    e.stopPropagation();
-    const card=btn.closest('.card'); const p=PRODUCTS[+card.dataset.idx];
-    if(!p) return;
-    open(card,p);
-    try{ history.pushState({drwProduct:p.slug},'','/shop/'+p.slug); }catch(_){}
-  }));
-
-  /* Back button closes the dialog rather than leaving the site. */
-  window.addEventListener('popstate',()=>{ if(cur) close(true); });
-
-  /* Arriving with ?product=<slug> opens that tile. The footer's range list
-     uses it, so those links land on the homepage and open the card rather
-     than taking the visitor off to a separate page. */
+  /* Landing from a product page.
+       #p-<slug>   the × sends you back to that exact tile. The grid is built
+                   by JS, so the anchor does not exist when the browser first
+                   tries to honour the hash — scroll it ourselves once it does.
+       ?add=<slug> the product page's Add to bag. Adds it, then opens the bag,
+                   so the button does what it says rather than dumping the
+                   visitor at the top of the shop.
+     The param is stripped afterwards so it cannot re-fire on refresh or ride
+     along to the next section. */
   (function(){
-    var want=new URLSearchParams(location.search).get('product');
-    if(!want) return;
-    var idx=PRODUCTS.findIndex(function(p){return p.slug===want;});
+    var hash=(location.hash||'').replace(/^#/,'');
+    var add=new URLSearchParams(location.search).get('add');
+    var slug=add||(/^p-/.test(hash)?hash.slice(2):'');
+    if(!slug) return;
+    var idx=PRODUCTS.findIndex(function(p){return p.slug===slug;});
     if(idx<0) return;
-    var card=document.querySelector('.card[data-idx="'+idx+'"]');
-    if(!card) return;
-    /* Wait for the shop section to be in view so the dialog morphs out of the
-       right tile rather than one still parked off-screen. */
     setTimeout(function(){
-      card.scrollIntoView({block:'center'});
-      setTimeout(function(){ open(card,PRODUCTS[idx]); },260);
-    },140);
+      var card=document.getElementById('p-'+slug);
+      if(card) card.scrollIntoView({block:'center'});
+      if(add){
+        addToCart(idx);
+        try{ history.replaceState({},'','/#p-'+slug); }catch(_){}
+        if(typeof openCart==='function') setTimeout(openCart,320);
+      }
+    },160);
   })();
 })();
 
