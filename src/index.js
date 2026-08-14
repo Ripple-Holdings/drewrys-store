@@ -207,12 +207,13 @@ async function renderSite(request, env) {
     + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
     + 'botanical oils. Free UK delivery over £40.';
 
-  /* Real links to every product. The #shop grid is rebuilt by JS on load, so
-     hrefs placed inside it never survive for a renderer to follow. This list
-     is static markup in the footer and is what gives the site an internal
-     link graph — it had none at all, every nav item being a # fragment. */
+  /* The footer stays on the homepage. These open the product's own tile
+     rather than navigating away: ?product=<slug> is read on load and the
+     dialog opens, so the footer behaves like the rest of the one-page site.
+     The crawlable link to /shop/<slug> lives on the card's "Learn more"
+     instead, which is where a product link belongs anyway. */
   const productLinks = '<li class="fl-lh">THE RANGE</li>'
-    + live.map((p) => `<li><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></li>`).join('');
+    + live.map((p) => `<li><a href="/?product=${esc(p.slug)}#shop">${esc(p.name)}</a></li>`).join('');
 
   /* The grid, rendered server-side.
      The client rebuilds #grid from window.__DREWRYS__ the moment it boots, so
