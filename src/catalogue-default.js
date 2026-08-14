@@ -94,7 +94,7 @@ export const DEFAULT_CATALOGUE = {
       "size": "100ml",
       "tagline": "Light hold, soft natural finish.",
       "badge": "",
-      "description": "A light-hold creme that softens and controls without stiffness, for a natural, worn-in finish.",
+      "description": "A light-hold crème that softens and controls without stiffness, for a natural, worn-in finish.",
       "price_pence": 2499,
       "ingredients": [
         "Nutmeg",
@@ -112,9 +112,9 @@ export const DEFAULT_CATALOGUE = {
       "slug": "form",
       "name": "Form",
       "size": "240ml",
-      "tagline": "Nutritious creative creme, all hair types.",
+      "tagline": "Nutritious creative crème, all hair types.",
       "badge": "",
-      "description": "A nutritious creative creme for all hair types, adding moisture and shape while conditioning as you style.",
+      "description": "A nutritious creative crème for all hair types, adding moisture and shape while conditioning as you style.",
       "price_pence": 2499,
       "ingredients": [
         "Marula",

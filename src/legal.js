@@ -216,8 +216,10 @@ circumstances where it does not apply.</p>
 illustrative and colours vary between screens. Sizes and volumes are nominal.</p>
 <p>Please read the ingredients and directions before use. If you have known
 sensitivities, patch test first. Our products are for external use only and
-are not suitable for anyone with an allergy to any listed ingredient. Candles
-should never be left unattended.</p>
+are not suitable for anyone with an allergy to any listed ingredient. The full
+ingredient list is printed on every pack; if you would like it before you
+order, email <a href="mailto:hello@drewrys.store">hello@drewrys.store</a> and
+we will send it over.</p>
 
 <h2>8. Our liability</h2>
 <p>We are responsible for loss you suffer that is a foreseeable result of us

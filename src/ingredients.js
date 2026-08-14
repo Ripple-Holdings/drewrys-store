@@ -6,8 +6,12 @@ export const DEFAULT_INGREDIENTS = [
     "name": "Amber",
     "slug": "amber",
     "icon": "",
-    "bullets": [],
-    "text": ""
+    "bullets": [
+      "Warm resinous base note",
+      "Grounds the scent",
+      "Lasts through the day"
+    ],
+    "text": "Amber is a base note rather than an active: it is what stops a fresh citrus opening from disappearing within the hour. Warm, resinous and slightly sweet, it sits underneath the brighter oils and holds the scent together as the day goes on. It is the part people recognise without being able to name."
   },
   {
     "name": "Baobab",
@@ -36,8 +40,12 @@ export const DEFAULT_INGREDIENTS = [
     "name": "Bitter Orange",
     "slug": "bitter-orange",
     "icon": "/img/ing-icon-bitter-orange.svg",
-    "bullets": [],
-    "text": ""
+    "bullets": [
+      "Clarifies and refreshes",
+      "Cuts through product build-up",
+      "Bright citrus top note"
+    ],
+    "text": "Pressed from the peel of the bitter orange, not the blossom — that is neroli, which we also use, and the two behave very differently. Peel oil is brighter and more astringent: it cuts through product build-up and leaves the hair and scalp feeling genuinely clean rather than coated. It carries the sharp citrus note you meet first when you open the jar."
   },
   {
     "name": "Kalahari Melon",
@@ -97,8 +105,12 @@ export const DEFAULT_INGREDIENTS = [
     "name": "Pistachio",
     "slug": "pistachio",
     "icon": "",
-    "bullets": [],
-    "text": ""
+    "bullets": [
+      "Softens and nourishes",
+      "Rich in vitamin E",
+      "Absorbs without weight"
+    ],
+    "text": "A light, fast-absorbing nut oil rich in vitamin E and unsaturated fatty acids. It softens coarse or dry hair and adds a little pliability without the heaviness you get from a butter, which makes it useful in a styling product that still has to move at the end of the day."
   },
   {
     "name": "Prickly Pear",

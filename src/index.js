@@ -34,6 +34,9 @@ import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js'
 import { vatForOrder, vatReport, vatPeriods, vatSettings, sellingPrice } from './vat.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
+import { BIZ, shellPage, shopPage, productPage, ingredientsPage,
+         aboutPage, wholesalePage, stockistsPage } from './pages.js';
+import { homeGraph, shopGraph, productGraph, pageGraph } from './schema.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -45,6 +48,92 @@ const json = (d, status = 200) => new Response(JSON.stringify(d), {
 const html = (markup, status = 200) => new Response(markup, {
   status, headers: { 'Content-Type': 'text/html;charset=utf-8' },
 });
+
+/* ── canonical origin, redirects and headers ─────────────────────────────── */
+
+/**
+ * The one true origin. Everything else 301s here.
+ *
+ * Before this existed, four hostnames each returned a 200 with identical
+ * content: http and https, www and apex. That splits ranking signals across
+ * four URLs, and — far worse — /checkout was reachable over plaintext http,
+ * so a customer's name, email, phone and postal address were submitted in
+ * clear text. The privacy policy states the site is served over HTTPS, so
+ * this was also a claim we were not honouring.
+ */
+const CANONICAL_HOST = 'drewrys.store';
+
+/**
+ * Cloudflare terminates TLS at the edge, so url.protocol is not reliable on
+ * its own. cf-visitor carries the scheme the *client* actually used.
+ */
+function clientScheme(request, url) {
+  try {
+    const v = request.headers.get('cf-visitor');
+    if (v) {
+      const s = JSON.parse(v).scheme;
+      if (s) return s;
+    }
+  } catch { /* fall through to the URL */ }
+  return url.protocol.replace(':', '');
+}
+
+/** 301 to https://drewrys.store<path> when the request came in any other way. */
+function canonicalRedirect(request, url) {
+  const host = url.hostname.toLowerCase();
+  const insecure = clientScheme(request, url) === 'http';
+  const wrongHost = host === 'www.' + CANONICAL_HOST;
+  if (!insecure && !wrongHost) return null;
+  if (host !== CANONICAL_HOST && !wrongHost) return null;  // preview/dev hosts pass through
+  const target = new URL(url.toString());
+  target.protocol = 'https:';
+  target.hostname = CANONICAL_HOST;
+  return Response.redirect(target.toString(), 301);
+}
+
+/**
+ * Security headers, applied to every response on the way out.
+ *
+ * No CSP here on purpose: the site inlines all of its CSS and JS, so any
+ * useful policy would need 'unsafe-inline' and would buy nothing. Adding one
+ * properly means externalising those assets first.
+ *
+ * HSTS is safe to send now that canonicalRedirect() guarantees https.
+ */
+function harden(res, { cache } = {}) {
+  // 204/205/304 must carry a null body — the asset handler returns 304 on a
+  // conditional request, and passing a body for one of those statuses throws.
+  const nullBody = res.status === 101 || res.status === 204
+                || res.status === 205 || res.status === 304;
+  const h = new Headers(res.headers);
+  h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  h.set('X-Content-Type-Options', 'nosniff');
+  h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  h.set('X-Frame-Options', 'SAMEORIGIN');
+  h.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), interest-cohort=()');
+  if (cache && !h.has('Cache-Control')) h.set('Cache-Control', cache);
+  return new Response(nullBody ? null : res.body,
+    { status: res.status, statusText: res.statusText, headers: h });
+}
+
+/**
+ * Cache policy by path.
+ *
+ * Everything under /img and the font CSS was being served
+ * `max-age=0, must-revalidate`, the Cloudflare Pages default, which nobody
+ * had overridden. That meant ~34 conditional requests on every repeat visit
+ * before anything could paint. These files are content-addressed by name and
+ * change only when replaced, so a long max-age with revalidation is correct.
+ *
+ * HTML stays short: the catalogue and stock are injected per request.
+ */
+function cacheFor(path) {
+  if (/^\/(img|media)\//.test(path)) return 'public, max-age=31536000, stale-while-revalidate=86400';
+  if (/\.(css|woff2?|png|jpe?g|svg|webp|avif|ico)$/i.test(path)) {
+    return 'public, max-age=31536000, stale-while-revalidate=86400';
+  }
+  return null;
+}
 
 /* ── storefront ──────────────────────────────────────────────────────────── */
 
@@ -101,10 +190,68 @@ async function renderSite(request, env) {
     JSON.stringify(payload).replace(/</g, '\\u003c')
   };</script>`;
 
-  const body = await res.text();
+  /* Structured data. Generated from the same objects the page renders, so
+     price and availability cannot drift from the shop. */
+  const graph = homeGraph({
+    biz: BIZ, settings, products: live, stock: payload.stock,
+    ratings: payload.ratings, freeOver: payload.free_over,
+  });
+  const ld = `<script type="application/ld+json">${graph}</script>`;
+
+  /* The head that shipped said "Drewrys, premium haircare, with purpose." in
+     both the title and the description — byte-identical, 40 characters, and
+     naming no product category, no market and no location. Nobody searches
+     for an abstract noun. */
+  const title = 'Drewrys — barber-made hair clay, paste &amp; sea salt spray, made in the UK';
+  const desc = 'Premium men’s haircare built by a barber with 15 years on the floor. '
+    + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
+    + 'botanical oils. Free UK delivery over £40.';
+
+  /* Real links to every product. The #shop grid is rebuilt by JS on load, so
+     hrefs placed inside it never survive for a renderer to follow. This list
+     is static markup in the footer and is what gives the site an internal
+     link graph — it had none at all, every nav item being a # fragment. */
+  const productLinks = '<li class="fl-lh">THE RANGE</li>'
+    + live.map((p) => `<li><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></li>`).join('');
+
+  /* The grid, rendered server-side.
+     The client rebuilds #grid from window.__DREWRYS__ the moment it boots, so
+     this markup is short-lived in a real browser. It is not short-lived for a
+     crawler that does not run scripts: before this, the raw HTML shipped
+     `<div class="grid" id="grid"></div>` and the only £ figures anywhere in
+     the document were three £0.00 cart placeholders. Anything that could not
+     execute JavaScript saw a shop with no products and no prices.
+     Classes mirror the client template so there is no visual flash. */
+  const gridHtml = live.map((p, i) => {
+    const n = payload.stock[p.slug];
+    const out = n !== null && n !== undefined && n <= 0;
+    return `<article class="card${out ? ' is-sold' : ''}" data-idx="${i}">`
+      + `<div class="shot">${out ? '<span class="tag tag--out">Sold out</span>'
+          : (p.badge ? `<span class="tag">${esc(p.badge)}</span>` : '')}`
+      + `<img class="pshot" src="${esc(p.image || '')}" alt="${esc(p.name)}" `
+      + `width="600" height="600" loading="lazy" decoding="async"></div>`
+      + `<div class="meta"><h3 class="pname">${esc(p.name)}</h3>`
+      + `<p class="pvol">${esc(p.size || '')}</p>`
+      + `<p class="pdesc">${esc(p.tagline || '')}</p>`
+      + `<div class="prow"><span class="price">${gbp(p.price_pence)}</span>`
+      + `<div class="pbtns"><a class="learn" href="/shop/${esc(p.slug)}">Learn more</a>`
+      + `${out ? '<button class="add add--out" disabled>Sold out</button>'
+               : '<button class="add">Add</button>'}</div></div></div></article>`;
+  }).join('');
+
+  let body = await res.text();
+  body = body
+    .replace('<title>Drewrys, premium haircare, with purpose.</title>', `<title>${title}</title>`)
+    .replace('<meta name="description" content="Drewrys, premium haircare, with purpose.">',
+             `<meta name="description" content="${desc}">`)
+    .replace('<meta property="og:title" content="Drewrys">',
+             '<meta property="og:title" content="Drewrys — barber-made haircare, made in the UK">')
+    .replace('<div class="grid" id="grid"></div>', `<div class="grid" id="grid">${gridHtml}</div>`)
+    .replace('<ul id="flProducts"></ul>', `<ul id="flProducts">${productLinks}</ul>`);
+
   return html(body.includes('</head>')
-    ? body.replace('</head>', inject + '</head>')
-    : inject + body);
+    ? body.replace('</head>', inject + ld + '</head>')
+    : inject + ld + body);
 }
 
 async function renderCheckout(env) {
@@ -129,6 +276,219 @@ async function renderCheckout(env) {
     collect_address: settings.collect_address || env.SHOP_COLLECT_ADDR || '',
     address_lookup: !!env.ADDRESS_API_KEY,
   }));
+}
+
+/* ── content pages ───────────────────────────────────────────────────────── */
+
+/**
+ * Everything these pages need, gathered once.
+ *
+ * The homepage keeps its catalogue in a JS object and builds the grid on the
+ * client, so a crawler that does not execute scripts sees a shop with no
+ * products and no prices. These pages are the fix: real HTML, real URLs, one
+ * product per page, which is also the only shape eligible for product rich
+ * results.
+ */
+async function shopContext(env) {
+  const cat = await getCatalogue(env);
+  const settings = await getSettings(env);
+  const products = cat.products.filter((p) => p.active !== false)
+    .map((p) => ({ ...p, price_pence: sellingPrice(p, settings) }));
+  const allReviews = await getReviews(env);
+  return {
+    settings,
+    products,
+    stock: await stockMap(env, products),
+    ingredients: await getIngredients(env),
+    reviews: publishedReviews(allReviews),
+    ratings: ratingSummary(allReviews),
+    freeOver: settings.free_over || {},
+  };
+}
+
+async function renderShop(env) {
+  const c = await shopContext(env);
+  return html(shopPage({
+    products: c.products,
+    stock: c.stock,
+    jsonld: shopGraph({ biz: BIZ, settings: c.settings, products: c.products,
+                        stock: c.stock, ratings: c.ratings, freeOver: c.freeOver }),
+  }));
+}
+
+async function renderProduct(env, slug) {
+  const c = await shopContext(env);
+  const product = c.products.find((p) => p.slug === slug);
+  if (!product) return notFound();
+
+  // "Pairs well with", the same three the upsell offers, minus this one and
+  // anything sold out — a cross-sell to something unbuyable is a dead end.
+  const related = c.products
+    .filter((p) => p.slug !== slug && (c.stock[p.slug] ?? 1) > 0)
+    .slice(0, 3);
+
+  return html(productPage({
+    product,
+    stock: c.stock[product.slug],
+    ingredients: c.ingredients,
+    related,
+    jsonld: productGraph({ biz: BIZ, settings: c.settings, product,
+                           stock: c.stock[product.slug], ratings: c.ratings,
+                           reviews: c.reviews, freeOver: c.freeOver }),
+  }));
+}
+
+async function renderIngredients(env) {
+  const c = await shopContext(env);
+  return html(ingredientsPage({
+    ingredients: c.ingredients,
+    jsonld: pageGraph({ biz: BIZ, settings: c.settings, name: 'Ingredients',
+                        path: '/ingredients',
+                        crumbs: [{ name: 'Ingredients', path: '/ingredients' }] }),
+  }));
+}
+
+async function renderStatic(env, which) {
+  const settings = await getSettings(env);
+  const g = (name, path, type) => pageGraph({
+    biz: BIZ, settings, name, path, type, crumbs: [{ name, path }],
+  });
+  if (which === 'about') {
+    return html(aboutPage({ jsonld: g('Our story', '/about', 'AboutPage') }));
+  }
+  if (which === 'wholesale') {
+    return html(wholesalePage({ jsonld: g('Wholesale', '/wholesale') }));
+  }
+  return html(stockistsPage({ jsonld: g('Where to buy', '/stockists') }));
+}
+
+/* ── crawler plumbing: robots, sitemap, 404 ──────────────────────────────── */
+
+/**
+ * robots.txt.
+ *
+ * Cloudflare was serving a managed file that blocked the AI *training*
+ * crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot and friends) while
+ * leaving every *retrieval* agent — OAI-SearchBot, ChatGPT-User,
+ * Claude-SearchBot, PerplexityBot, Googlebot — allowed. That posture is
+ * deliberate and worth keeping: it refuses free training data while still
+ * permitting citation, which is what Content-Signal `use=reference` states.
+ *
+ * The one thing it lacked was a Sitemap: line. Serving our own file keeps the
+ * policy and adds the pointer.
+ */
+function robotsTxt() {
+  const body = `# Drewrys — https://drewrys.store
+#
+# Search and AI *retrieval* are welcome: OAI-SearchBot, ChatGPT-User,
+# Claude-SearchBot, Claude-User, PerplexityBot and Googlebot are all allowed
+# by the wildcard below and are what put the shop in front of people.
+#
+# The agents named individually below collect training data rather than
+# answer a live query, which is a different bargain. Content-Signal states
+# the same thing in one line.
+
+User-agent: *
+Content-Signal: search=yes,ai-train=no,use=reference
+Allow: /
+Disallow: /admin
+Disallow: /order
+Disallow: /checkout
+Disallow: /review/
+
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+Sitemap: https://${CANONICAL_HOST}/sitemap.xml
+`;
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/plain;charset=utf-8',
+               'Cache-Control': 'public, max-age=3600' },
+  });
+}
+
+/**
+ * sitemap.xml, generated from the live catalogue so a product added in
+ * /admin appears here without anyone remembering to update a static file.
+ * Sold-out products stay listed — they are still the right landing page for
+ * the query, and the page says so honestly.
+ */
+async function sitemapXml(env) {
+  const cat = await getCatalogue(env);
+  const live = cat.products.filter((p) => p.active !== false);
+  const today = new Date().toISOString().slice(0, 10);
+  const base = `https://${CANONICAL_HOST}`;
+
+  const urls = [
+    { loc: '/', priority: '1.0', freq: 'daily' },
+    { loc: '/shop', priority: '0.9', freq: 'daily' },
+    ...live.map((p) => ({ loc: `/shop/${p.slug}`, priority: '0.8', freq: 'weekly' })),
+    { loc: '/about', priority: '0.7', freq: 'monthly' },
+    { loc: '/ingredients', priority: '0.7', freq: 'monthly' },
+    { loc: '/wholesale', priority: '0.7', freq: 'monthly' },
+    { loc: '/stockists', priority: '0.6', freq: 'monthly' },
+    { loc: '/terms', priority: '0.3', freq: 'yearly' },
+    { loc: '/returns', priority: '0.3', freq: 'yearly' },
+    { loc: '/privacy', priority: '0.3', freq: 'yearly' },
+  ];
+
+  const body = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url>
+    <loc>${base}${u.loc}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${u.freq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`).join('\n')}
+</urlset>
+`;
+  return new Response(body, {
+    headers: { 'Content-Type': 'application/xml;charset=utf-8',
+               'Cache-Control': 'public, max-age=3600' },
+  });
+}
+
+/**
+ * A 404 that is worth landing on. The previous one returned a correct status
+ * with a zero-byte body, so the visitor got a blank white screen and no way
+ * back.
+ */
+function notFound() {
+  return html(shellPage({
+    title: 'Page not found · Drewrys',
+    description: 'That page does not exist. Browse the Drewrys range instead.',
+    path: '/404',
+    noindex: true,
+    body: `<section class="pg pg--narrow">
+      <p class="pg-eyebrow">404</p>
+      <h1>That page has moved, or never existed.</h1>
+      <p>Nothing here. The range is a click away, or email
+        <a href="mailto:hello@drewrys.store">hello@drewrys.store</a> and we will point you at it.</p>
+      <p class="pg-cta"><a class="btn" href="/shop">Shop the range</a>
+        <a class="btn btn--ghost" href="/">Home</a></p>
+    </section>`,
+  }), 404);
 }
 
 /* ── orders ──────────────────────────────────────────────────────────────── */
@@ -1146,10 +1506,49 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Consolidate on https://drewrys.store before anything else runs, so the
+    // rest of the Worker only ever sees one origin.
+    const redirect = canonicalRedirect(request, url);
+    if (redirect) return redirect;
+
     if (request.method === 'GET') ctx.waitUntil(recordHit(request, env, path));
     try {
+      const res = await route(request, env, ctx, url, path);
+      return harden(res, { cache: cacheFor(path) });
+    } catch (e) {
+      console.error(e);
+      return harden(new Response('Server error: ' + e.message, { status: 500 }));
+    }
+  },
+};
+
+/**
+ * Routing proper.
+ *
+ * A module-level function rather than a method on the default export: the
+ * runtime may invoke `fetch` detached from the object, in which case `this`
+ * is undefined and `this.route(...)` throws on every request. Every return
+ * here passes back through harden() in fetch().
+ */
+async function route(request, env, ctx, url, path) {
       if (path === '/' || path === '/index.html') return renderSite(request, env);
       if (path === '/checkout') return renderCheckout(env);
+
+      // Crawler plumbing.
+      if (path === '/robots.txt') return robotsTxt();
+      if (path === '/sitemap.xml') return sitemapXml(env);
+
+      // Real URLs for the things the one-page site could never rank for.
+      if (path === '/shop') return renderShop(env);
+      if (path.startsWith('/shop/')) {
+        return renderProduct(env, decodeURIComponent(path.slice(6)).replace(/\/+$/, ''));
+      }
+      if (path === '/ingredients') return renderIngredients(env);
+      if (path === '/about') return renderStatic(env, 'about');
+      if (path === '/wholesale') return renderStatic(env, 'wholesale');
+      if (path === '/stockists') return renderStatic(env, 'stockists');
+
       if (path.startsWith('/review/share/')) return handleShare(env, path.slice(14));
       if (path.startsWith('/review/')) return handleReview(request, env, path.slice(8));
       if (path === '/api/address') return lookupPostcode(request, env, url);
@@ -1208,11 +1607,18 @@ export default {
       if (path === '/privacy') return html(PRIVACY);
       if (path === '/admin') return handleAdmin(request, env, url, ctx);
       if (path.startsWith('/media/')) return serveImage(env, decodeURIComponent(path.slice(7).split('?')[0]));
-      if (env.ASSETS) return env.ASSETS.fetch(request);
-      return new Response('Not found', { status: 404 });
-    } catch (e) {
-      console.error(e);
-      return new Response('Server error: ' + e.message, { status: 500 });
-    }
-  },
-};
+
+      // Trailing slashes used to dead-end: /terms/ was a hard 404 rather than
+      // a redirect, so any inbound link written with one was lost.
+      if (path.length > 1 && path.endsWith('/')) {
+        const t = new URL(url.toString());
+        t.pathname = path.replace(/\/+$/, '');
+        return Response.redirect(t.toString(), 301);
+      }
+
+      if (env.ASSETS) {
+        const asset = await env.ASSETS.fetch(request);
+        if (asset.status !== 404) return asset;
+      }
+      return notFound();
+}
