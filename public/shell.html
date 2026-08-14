@@ -2015,8 +2015,19 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{x:0,y:0,scaleX:1,scaleY:1,duration:.42,ease:'power3.out'});
     gsap.from(dg.querySelectorAll('.md-body>*'),{opacity:0,y:8,duration:.3,delay:.16,stagger:.03,ease:'power2.out'});
   }
-  function close(){
+  /* fromPop is true when the back button did this, in which case the history
+     entry has already gone and touching it again would leave the site.
+     Otherwise the URL goes back to whatever it was before the card opened —
+     either by stepping back over the pushed entry, or, when the visitor
+     landed directly on /shop/<slug>, by replacing it with the homepage. */
+  function close(fromPop){
     if(!cur) return; const {bd,wrap,dg,card}=cur; cur=null;
+    if(!fromPop){
+      try{
+        if(history.state && history.state.drwProduct) history.back();
+        else if(/^\/shop\//.test(location.pathname)) history.replaceState({},'','/');
+      }catch(_){}
+    }
     const done=()=>{bd.remove();wrap.remove();};
     if(reduce || typeof gsap==='undefined'){ done(); return; }
     const cr=card.getBoundingClientRect(), dr=dg.getBoundingClientRect();
@@ -2024,35 +2035,38 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     gsap.to(dg,{transformOrigin:'top left', x:cr.left-dr.left, y:cr.top-dr.top, scaleX:cr.width/dr.width, scaleY:cr.height/dr.height, opacity:.5, duration:.36, ease:'power3.in', onComplete:done});
   }
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
-  /* "Learn more" is a plain link to the product's own page. It used to open
-     the dialog and rewrite the URL, which meant the same card existed in two
-     places; the page is the card now, so the link just goes there. open() is
-     still used by the "pairs well with" upsell. */
+  /* "Learn more" is a real <a href="/shop/<slug>"> that opens the dialog
+     rather than navigating, and puts that address in the URL bar. The link is
+     the truth — Cmd/ctrl/middle click and "copy link" all give a working
+     product URL, and that is also what a crawler follows — while the dialog
+     stays exactly as it was. */
+  document.querySelectorAll('.learn').forEach(btn=>btn.addEventListener('click',e=>{
+    if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||e.button!==0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const card=btn.closest('.card'); const p=PRODUCTS[+card.dataset.idx];
+    if(!p) return;
+    open(card,p);
+    try{ history.pushState({drwProduct:p.slug},'','/shop/'+p.slug); }catch(_){}
+  }));
 
-  /* Landing from a product page.
-       #p-<slug>   the × sends you back to that exact tile. The grid is built
-                   by JS, so the anchor does not exist when the browser first
-                   tries to honour the hash — scroll it ourselves once it does.
-       ?add=<slug> the product page's Add to bag. Adds it, then opens the bag,
-                   so the button does what it says rather than dumping the
-                   visitor at the top of the shop.
-     The param is stripped afterwards so it cannot re-fire on refresh or ride
-     along to the next section. */
+  /* Back button closes the dialog rather than leaving the site. */
+  window.addEventListener('popstate',()=>{ if(cur) close(true); });
+
+  /* Landing straight on /shop/<slug>, from a search result or a shared link.
+     The Worker serves this same page and sets __DREWRYS_OPEN__, so the card
+     opens on arrival and the visitor sees exactly what they would have seen
+     clicking Learn more. */
   (function(){
-    var hash=(location.hash||'').replace(/^#/,'');
-    var add=new URLSearchParams(location.search).get('add');
-    var slug=add||(/^p-/.test(hash)?hash.slice(2):'');
+    var slug=window.__DREWRYS_OPEN__;
     if(!slug) return;
     var idx=PRODUCTS.findIndex(function(p){return p.slug===slug;});
     if(idx<0) return;
     setTimeout(function(){
       var card=document.getElementById('p-'+slug);
-      if(card) card.scrollIntoView({block:'center'});
-      if(add){
-        addToCart(idx);
-        try{ history.replaceState({},'','/#p-'+slug); }catch(_){}
-        if(typeof openCart==='function') setTimeout(openCart,320);
-      }
+      if(!card) return;
+      card.scrollIntoView({block:'center'});
+      setTimeout(function(){ open(card,PRODUCTS[idx]); },240);
     },160);
   })();
 })();
