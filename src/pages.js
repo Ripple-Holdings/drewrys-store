@@ -1,8 +1,15 @@
 /**
  * Drewrys — content pages.
  *
- * Everything the storefront could not rank for, on its own crawlable URL:
- * /shop, /shop/<slug>, /about, /ingredients, /wholesale, /stockists.
+ * One job: a real, server-rendered page for each product at /shop/<slug>,
+ * plus the 404.
+ *
+ * These are NOT site navigation. Nothing on the storefront links to them as
+ * pages - the footer stays on the homepage and "Learn more" opens the modal.
+ * They exist because Googlebot never clicks anything: it requests
+ * /shop/matte-clay from the server and indexes whatever comes back. Without
+ * a page at that address the URL 404s, and a product with no URL cannot earn
+ * a product rich result or a free Shopping listing.
  *
  * WHY THIS IS A SEPARATE SHELL FROM public/shell.html
  * ---------------------------------------------------
@@ -12,10 +19,8 @@
  * It is a terrible trade for a product page, whose job is to load fast and be
  * read. So these pages carry their own ~6 KB of CSS and no JavaScript at all.
  *
- * The type is a system stack rather than the brand faces for the same reason:
- * pulling 266 KB of base64 font to render 500 words of body copy would undo
- * the point of building these pages. If the brand faces are wanted here later,
- * serve them as external .woff2 files with a preload — not inlined.
+ * Type comes from /fonts.css - the real NeueMontreal and Geist - which is
+ * already deployed and cached, so these pages match the shop.
  *
  * Every page here is server-rendered HTML. No client JS is required to read
  * any of it, which is the whole reason it exists: the homepage keeps its
@@ -128,9 +133,28 @@ h3{font-size:19px;margin:1.6em 0 .4em}
    button — just laid out as a page instead of an overlay. Only the parts a
    modal needs and a page does not (backdrop, close button, sticky footer
    gradient) are dropped. */
-.card-pg{width:min(560px,100%);margin:clamp(20px,4vw,44px) auto 0;
+/* The page presents as the dialog does: dark ground, the card floated on it,
+   scrolling inside itself rather than the page scrolling behind. Values are
+   shell.html's — .md-backdrop's rgba(20,23,27,.55) over --ink for the ground,
+   .md-dialog's min(500px,94vw) / 90vh / 24px radius for the card. */
+body.pdp{background:#141719;display:flex;align-items:center;justify-content:center;
+  min-height:100vh;min-height:100svh;padding:20px}
+body.pdp::before{content:"";position:fixed;inset:0;
+  background:radial-gradient(120% 90% at 50% 0%,rgba(199,154,107,.16),transparent 60%),
+             rgba(20,23,27,.55);pointer-events:none}
+.card-pg{position:relative;width:min(500px,94vw);max-height:90vh;overflow:auto;
   background:var(--cotton-2);border:1px solid var(--line);border-radius:24px;
-  box-shadow:0 40px 90px -24px rgba(25,28,33,.28);overflow:hidden}
+  box-shadow:0 40px 90px -24px rgba(25,28,33,.55);
+  scrollbar-width:none;-ms-overflow-style:none}
+.card-pg::-webkit-scrollbar{display:none}
+/* Sticky so it stays put while the card scrolls, exactly as in the dialog.
+   The negative bottom margin keeps it out of the flow so it does not push
+   the photo down. */
+.card-pg .x{position:sticky;top:6px;z-index:6;display:grid;place-items:center;
+  margin:0 8px -50px auto;width:44px;height:44px;background:transparent;border:0;
+  color:var(--slate);font-size:30px;line-height:1;text-decoration:none;opacity:.6;
+  transition:opacity .18s}
+.card-pg .x:hover{opacity:1}
 .card-pg .media{position:relative;aspect-ratio:2/1;background:#f5f2f3;
   display:grid;place-items:center;padding:6%;border-bottom:1px solid var(--line)}
 .card-pg .media img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
@@ -174,9 +198,11 @@ h3{font-size:19px;margin:1.6em 0 .4em}
 .spec dd{margin:0;color:var(--ink)}
 .backlink{display:inline-block;margin:0 0 4px;font-size:.72rem;letter-spacing:.1em;
   text-transform:uppercase;color:var(--peanut-deep);text-decoration:none;font-weight:700}
-.also{width:min(560px,100%);margin:clamp(34px,6vw,64px) auto 0}
-.also h2{font-family:"NeueMontreal","Geist",system-ui,sans-serif;font-weight:500;
-  text-transform:uppercase;letter-spacing:-.01em;font-size:1.05rem;margin:0 0 14px}
+.also-links{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.also-links a{display:inline-block;font-size:.78rem;font-weight:600;letter-spacing:.03em;
+  text-transform:uppercase;text-decoration:none;color:var(--slate-2);background:var(--peanut);
+  padding:9px 15px;border-radius:30px;transition:.18s}
+.also-links a:hover{background:var(--peanut-deep);color:var(--cotton)}
 
 .ing{display:grid;gap:22px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));
   margin:26px 0 50px;padding:0;list-style:none}
@@ -210,11 +236,10 @@ function header() {
   return `<header class="site"><div class="wrap">
     <a class="brand" href="/">drewrys.</a>
     <nav aria-label="Primary">
-      <a href="/shop">Shop</a>
-      <a href="/ingredients">Ingredients</a>
-      <a href="/about">Our story</a>
-      <a href="/wholesale">Wholesale</a>
-      <a href="/stockists">Find us</a>
+      <a href="/#shop">Shop</a>
+      <a href="/#ingredients">Ingredients</a>
+      <a href="/#story">Story</a>
+      <a href="/#wholesale">Wholesale</a>
     </nav>
   </div></header>`;
 }
@@ -226,16 +251,15 @@ function footer() {
       <div>
         <h2>Shop</h2>
         <ul>
-          <li><a href="/shop">The range</a></li>
-          <li><a href="/ingredients">Ingredients</a></li>
-          <li><a href="/wholesale">Trade &amp; wholesale</a></li>
-          <li><a href="/stockists">Where to buy</a></li>
+          <li><a href="/#shop">The range</a></li>
+          <li><a href="/#ingredients">Ingredients</a></li>
+          <li><a href="/#wholesale">Trade &amp; wholesale</a></li>
         </ul>
       </div>
       <div>
         <h2>Company</h2>
         <ul>
-          <li><a href="/about">Our story</a></li>
+          <li><a href="/#story">Our story</a></li>
           <li><a href="https://drewrys.im/">The barbershop</a></li>
           <li><a href="/terms">Terms</a></li>
           <li><a href="/returns">Returns</a></li>
@@ -275,7 +299,8 @@ function footer() {
  * `jsonld` takes an already-stringified graph so callers can build it from
  * live catalogue data without this module needing to know the shape.
  */
-export function shellPage({ title, description, path, body, noindex = false, jsonld = '', ogImage = '' }) {
+export function shellPage({ title, description, path, body, noindex = false, jsonld = '',
+                           ogImage = '', bare = false }) {
   const canonical = ORIGIN + (path === '/' ? '/' : path);
   const img = ogImage || `${ORIGIN}/img/share.jpg`;
   return `<!doctype html>
@@ -299,18 +324,24 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${esc(img)}">
-<meta name="theme-color" content="#F3EDE1">
+<meta name="theme-color" content="${bare ? '#141719' : '#F3EDE1'}">
 <link rel="stylesheet" href="/fonts.css">
 <style>${CSS}</style>
 ${jsonld ? `<script type="application/ld+json">${jsonld}</script>` : ''}
 </head>
-<body>
+${bare
+  /* Product pages present as the dialog does: the card alone on a dark
+     ground, no chrome around it. The × is the way out. */
+  ? `<body class="pdp">
+${body}
+</body>`
+  : `<body>
 ${header()}
 <main class="wrap" id="main">
 ${body}
 </main>
 ${footer()}
-</body>
+</body>`}
 </html>`;
 }
 
@@ -365,54 +396,6 @@ body{margin:0;background:#F3EDE1;color:#191C21;
 </html>`;
 }
 
-/* ── /shop ───────────────────────────────────────────────────────────────── */
-
-function stockLine(n) {
-  if (n === null || n === undefined) return '';
-  if (n <= 0) return '<span class="stock out">Sold out</span>';
-  if (n <= 5) return `<span class="stock">Only ${n} left</span>`;
-  return '<span class="stock">In stock</span>';
-}
-
-export function shopPage({ products, stock, jsonld }) {
-  const cards = products.map((p) => {
-    const n = stock[p.slug];
-    return `<li class="card">
-      <a class="shot" href="/shop/${esc(p.slug)}">
-        <img src="${esc(p.image || '/img/share.jpg')}" alt="${esc(p.name)}, ${esc(p.size || '')}"
-             width="600" height="600" loading="lazy" decoding="async">
-      </a>
-      <div class="body">
-        <h2><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></h2>
-        <p class="size">${esc(p.size || '')}</p>
-        <p class="tag">${esc(p.tagline || '')}</p>
-        <div class="foot">
-          <span class="price">${gbp(p.price_pence)}</span>
-          ${stockLine(n)}
-        </div>
-      </div>
-    </li>`;
-  }).join('\n');
-
-  return shellPage({
-    title: 'Shop all hair products — clay, paste, fibre & sea salt spray | Drewrys',
-    description:
-      'The full Drewrys range: matte clay, hair paste, fibre, sea salt spray, '
-      + 'curl cream and shampoo. Made in the UK by a working barber, with organic '
-      + 'botanical oils. Free UK delivery over £40.',
-    path: '/shop',
-    jsonld,
-    body: `<section class="pg">
-      <p class="pg-eyebrow">The range</p>
-      <h1>Hair products made by a barber, not a boardroom</h1>
-      <p class="lede">Seven products, built on the floor of a working Isle of Man
-        barbershop and made in the UK with organic, sustainably sourced botanical
-        oils. Every one of them is here.</p>
-    </section>
-    <ul class="grid">${cards}</ul>`,
-  });
-}
-
 /* ── /shop/<slug> ────────────────────────────────────────────────────────── */
 
 export function productPage({ product: p, stock: n, ingredients, related, jsonld }) {
@@ -433,26 +416,26 @@ export function productPage({ product: p, stock: n, ingredients, related, jsonld
   const steps = (p.howto || []).map((s) => `<li>${esc(s)}</li>`).join('');
   const sold = n !== null && n !== undefined && n <= 0;
 
-  /* "Pairs well with", drawn as the same card so the page reads as one piece. */
-  const alsoCards = related.map((r) => `<li class="card">
-      <a class="shot" href="/shop/${esc(r.slug)}">
-        <img src="${esc(r.image || '/img/share.jpg')}" alt="${esc(r.name)}"
-             width="600" height="600" loading="lazy" decoding="async">
-      </a>
-      <div class="body">
-        <h2><a href="/shop/${esc(r.slug)}">${esc(r.name)}</a></h2>
-        <p class="tag">${esc(r.tagline || '')}</p>
-        <div class="foot"><span class="price">${gbp(r.price_pence)}</span></div>
-      </div>
-    </li>`).join('');
+  /* "Pairs well with" — the same three the shop offers, as plain links so the
+     card stays a card. Each product page linking to three others also gives
+     the seven pages a link graph between themselves. */
+  const alsoLinks = related.map((r) =>
+    `<li><a href="/shop/${esc(r.slug)}">${esc(r.name)}</a></li>`).join('');
+
+  /* The × goes back to this product's own tile on the shop grid, not just the
+     top of the section — #p-<slug> is on every card, server-rendered and
+     client-rendered alike. */
+  const backToTile = `/#p-${esc(p.slug)}`;
 
   return shellPage({
     title: `${p.name}${p.size ? ', ' + p.size : ''} — ${p.tagline || 'Drewrys'} | Drewrys`,
     description: (p.description || p.tagline || '').slice(0, 155),
     path: `/shop/${p.slug}`,
     ogImage: p.image ? ORIGIN + p.image : '',
+    bare: true,
     jsonld,
     body: `<article class="card-pg">
+      <a class="x" href="${backToTile}" aria-label="Close">&times;</a>
       <div class="media">
         ${sold ? '<span class="tag">Sold out</span>'
                : (p.badge ? `<span class="tag">${esc(p.badge)}</span>` : '')}
@@ -460,7 +443,6 @@ export function productPage({ product: p, stock: n, ingredients, related, jsonld
              width="900" height="900" fetchpriority="high" decoding="async">
       </div>
       <div class="body">
-        <a class="backlink" href="/shop">← The range</a>
         <h1>${esc(p.name)}</h1>
         <p class="sub">${gbp(p.price_pence)} &middot; ${esc((p.size || '').toUpperCase())}</p>
         <p class="desc">${esc(p.description || p.tagline || '')}</p>
@@ -479,201 +461,14 @@ export function productPage({ product: p, stock: n, ingredients, related, jsonld
           <dt>Returns</dt><dd><a href="/returns">14 days</a>, unopened</dd>
         </dl>
 
+        ${alsoLinks ? `<h2>Pairs well with</h2>
+        <ul class="also-links">${alsoLinks}</ul>` : ''}
+
         ${sold
           ? '<span class="buy" aria-disabled="true">Sold out</span>'
-          : '<a class="buy" href="/#shop">Add to bag</a>'}
+          : `<a class="buy" href="/?add=${esc(p.slug)}#p-${esc(p.slug)}">Add to bag</a>`}
       </div>
-    </article>
-
-    ${alsoCards ? `<section class="also">
-      <h2>Pairs well with</h2>
-      <ul class="grid">${alsoCards}</ul>
-    </section>` : ''}`,
+    </article>`,
   });
 }
 
-/* ── /ingredients ────────────────────────────────────────────────────────── */
-
-export function ingredientsPage({ ingredients, jsonld }) {
-  const items = ingredients
-    .filter((i) => i.text)          // the two blank entries stay off the page
-    .map((i) => `<li id="${esc(i.slug)}">
-      <h2>${esc(i.name)}</h2>
-      ${(i.bullets || []).length
-        ? `<ul>${i.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>` : ''}
-      <p>${esc(i.text)}</p>
-    </li>`).join('\n');
-
-  return shellPage({
-    title: 'Ingredients — the oils and botanicals in Drewrys haircare | Drewrys',
-    description:
-      'Marula, baobab, prickly pear, kalahari melon and shea butter — what each '
-      + 'ingredient does for your hair, and where we source it from. Organic, '
-      + 'sustainably sourced, cruelty free.',
-    path: '/ingredients',
-    jsonld,
-    body: `<section class="pg">
-      <p class="pg-eyebrow">Ingredients</p>
-      <h1>Ingredients your hair will thank you for</h1>
-      <p class="lede">Every product is built on organic, sustainably sourced
-        botanical oils. Several come from cooperatives that put money back into
-        the communities that harvest them. Here is what each one does, and why
-        it is in the jar.</p>
-    </section>
-    <ul class="ing">${items}</ul>`,
-  });
-}
-
-/* ── /about ──────────────────────────────────────────────────────────────── */
-
-export function aboutPage({ jsonld }) {
-  return shellPage({
-    title: 'Our story — barber-made haircare from the Isle of Man | Drewrys',
-    description:
-      'Drewrys is made by Ben Drewry, a barber with 15 years on the floor. '
-      + 'Built in the Isle of Man, made in the UK, cruelty free, and tested '
-      + 'on paying clients every day.',
-    path: '/about',
-    jsonld,
-    body: `<section class="pg pg--narrow">
-      <p class="pg-eyebrow">Our story</p>
-      <h1>Built, not bought.</h1>
-      <p class="lede">Drewrys is the haircare range of Ben Drewry, a barber with
-        fifteen years on the floor and a shop in Douglas, Isle of Man.</p>
-
-      <p>With fifteen years in the barbering industry, we have tried every product
-        under the sun. We grew frustrated watching brands we loved sacrifice
-        quality for high-street volume, so we built our own range focused
-        entirely on consistency and performance.</p>
-
-      <p>Through rigorous testing, we developed a line to our exact
-        specifications. Infused with vitamins, natural oils and subtle, signature
-        scents, these products offer far more than standard styling. Everything is
-        proudly made in the UK, cruelty free, and crafted simply to be the best of
-        the best, day in and day out.</p>
-
-      <h2>Tested where it counts</h2>
-      <p>Every product in the range is used in the chair before it is sold in a
-        jar. That is the part a lab cannot replicate: if a clay goes tacky by
-        mid-afternoon, or a spray leaves hair like straw, we find out the same
-        week from the person sitting in front of us.</p>
-
-      <h2>Where the ingredients come from</h2>
-      <p>The oils are organic and sustainably sourced, and several come from
-        cooperatives that fund the communities harvesting them — shea butter
-        sorted and shelled by a women's cooperative in Ghana supporting over 1,400
-        people, prickly pear from a women's cooperative in South Morocco that
-        guarantees income and funds education, baobab from the Widows and Orphans
-        Movement in Ghana. <a href="/ingredients">The full ingredient library is
-        here.</a></p>
-
-      <h2>Find us</h2>
-      <p>The shop is at ${esc(BIZ.street)}, ${esc(BIZ.town)},
-        ${esc(BIZ.country)} ${esc(BIZ.postcode)}. You can
-        <a href="/stockists">collect an order for free</a>, or
-        <a href="tel:${esc(BIZ.phone.replace(/\s/g, ''))}">call ${esc(BIZ.phoneDisplay)}</a>.</p>
-
-      <p>For a cut rather than a jar, the barbershop is
-        <a href="https://drewrys.im/">Drewry's in Douglas</a> — same people, and
-        where every one of these products was tested before it went on sale.</p>
-
-      <p class="pg-cta"><a class="btn" href="/shop">Shop the range</a>
-        <a class="btn btn--ghost" href="/wholesale">Stock Drewrys</a></p>
-    </section>`,
-  });
-}
-
-/* ── /wholesale ──────────────────────────────────────────────────────────── */
-
-export function wholesalePage({ jsonld }) {
-  return shellPage({
-    title: 'Wholesale & trade accounts — stock Drewrys in your salon | Drewrys',
-    description:
-      'Trade pricing on the full Drewrys range for barbershops, salons and '
-      + 'retailers across the Isle of Man and the UK. Low minimum order, free '
-      + 'wholesale delivery, counter display and product training included.',
-    path: '/wholesale',
-    jsonld,
-    body: `<section class="pg pg--narrow">
-      <p class="pg-eyebrow">Trade</p>
-      <h1>Stock Drewrys in your salon</h1>
-      <p class="lede">Made in the UK and used on the floor every day. We supply
-        salons, barbershops and retailers across the Island and the UK.</p>
-
-      <h2>What a trade account gets you</h2>
-      <ul class="steps">
-        <li>Trade pricing on the full range</li>
-        <li>Low minimum order to get started</li>
-        <li>Free delivery on Isle of Man and UK wholesale orders</li>
-        <li>Counter display and product training included</li>
-      </ul>
-
-      <h2>Why barbers stock it</h2>
-      <p>It is built by a working barber, so it behaves the way you expect on the
-        floor: the clay reworks through the day, the spray does not go crunchy,
-        and nothing leaves residue you have to wash twice. Your clients ask what
-        you used, and you have it on the counter.</p>
-
-      <p>The range is made in the UK, cruelty free, and free from SLS, sulfates,
-        parabens, palm oil and mineral oil — which increasingly is the first
-        question a client asks.</p>
-
-      <h2>Get trade pricing</h2>
-      <p>Tell us your shop, roughly how much you would take to start, and where
-        you are. We come back within two working days with a price list.</p>
-      <p class="pg-cta">
-        <a class="btn" href="/#wholesale">Request trade pricing</a>
-        <a class="btn btn--ghost" href="mailto:${esc(BIZ.email)}?subject=Wholesale%20enquiry">Email us</a>
-      </p>
-      <p class="note">Prefer to talk it through? Call
-        <a href="tel:${esc(BIZ.phone.replace(/\s/g, ''))}">${esc(BIZ.phoneDisplay)}</a>
-        or email <a href="mailto:${esc(BIZ.email)}">${esc(BIZ.email)}</a>.</p>
-    </section>`,
-  });
-}
-
-/* ── /stockists ──────────────────────────────────────────────────────────── */
-
-export function stockistsPage({ jsonld }) {
-  return shellPage({
-    title: `Where to buy Drewrys — ${BIZ.town}, ${BIZ.country} | Drewrys`,
-    description:
-      `Buy Drewrys haircare online with UK delivery, or collect free from our shop at `
-      + `${BIZ.street}, ${BIZ.town}, ${BIZ.country}. Open to trade stockists too.`,
-    path: '/stockists',
-    jsonld,
-    body: `<section class="pg pg--narrow">
-      <p class="pg-eyebrow">Find us</p>
-      <h1>Where to buy Drewrys</h1>
-      <p class="lede">Order online for UK delivery, or collect for free from the
-        shop in central Douglas.</p>
-
-      <h2>Collect in Douglas — free</h2>
-      <address style="font-style:normal;line-height:1.8">
-        <strong>${esc(BIZ.tradingName)}</strong><br>
-        ${esc(BIZ.street)}<br>
-        ${esc(BIZ.town)}<br>
-        ${esc(BIZ.country)} ${esc(BIZ.postcode)}<br>
-        <a href="tel:${esc(BIZ.phone.replace(/\s/g, ''))}">${esc(BIZ.phoneDisplay)}</a> ·
-        <a href="mailto:${esc(BIZ.email)}">${esc(BIZ.email)}</a>
-      </address>
-      <p>Choose <strong>Collect in store</strong> at checkout and there is no
-        delivery charge. We will email you when it is ready to pick up.</p>
-
-      <h2>Delivery</h2>
-      <table class="rates">
-        <tr><th>Where</th><th>Cost</th><th>Time</th></tr>
-        <tr><td>Collect from the shop</td><td>Free</td><td>1–2 working days</td></tr>
-        <tr><td>Isle of Man, tracked</td><td>£2.50</td><td>1–2 working days</td></tr>
-        <tr><td>United Kingdom, tracked</td><td>£4.50</td><td>3–5 working days</td></tr>
-        <tr><td>Guernsey and Jersey, tracked</td><td>£4.50</td><td>3–5 working days</td></tr>
-      </table>
-      <p class="note"><strong>Free delivery on orders over £40.</strong> Two
-        products usually clears it.</p>
-
-      <h2>Stock it in your shop</h2>
-      <p>We supply barbershops, salons and retailers across the Island and the UK.
-        <a href="/wholesale">Trade pricing is here.</a></p>
-    </section>`,
-  });
-}

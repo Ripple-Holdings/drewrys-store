@@ -159,7 +159,7 @@ function organisation(biz, settings) {
       '@id': SHOP,
       name: biz.tradingName,
       description: 'Drewrys haircare shop and collection point in central Douglas, Isle of Man.',
-      url: `${ORIGIN}/stockists`,
+      url: ORIGIN + '/',
       image: `${ORIGIN}/img/hero-shop.jpg`,
       telephone: biz.phone,
       email: biz.email,
@@ -353,34 +353,6 @@ export function homeGraph({ biz, settings, products, stock, ratings, freeOver })
   });
 }
 
-export function shopGraph({ biz, settings, products, stock, ratings, freeOver }) {
-  return safe({
-    '@context': 'https://schema.org',
-    '@graph': [
-      ...organisation(biz, settings),
-      ...shippingNodes(freeOver),
-      breadcrumb([{ name: 'Home', path: '/' }, { name: 'Shop', path: '/shop' }]),
-      {
-        '@type': 'CollectionPage',
-        '@id': `${ORIGIN}/shop#webpage`,
-        url: `${ORIGIN}/shop`,
-        name: 'Shop the Drewrys range',
-        inLanguage: 'en-GB',
-        isPartOf: { '@id': `${ORIGIN}/#website` },
-      },
-      {
-        '@type': 'ItemList',
-        '@id': `${ORIGIN}/shop#list`,
-        numberOfItems: products.length,
-        itemListElement: products.map((p, i) => ({
-          '@type': 'ListItem', position: i + 1, url: `${ORIGIN}/shop/${p.slug}`, name: p.name,
-        })),
-      },
-      ...products.map((p) => productNode(p, stock[p.slug], { ratings })),
-    ],
-  });
-}
-
 export function productGraph({ biz, settings, product, stock, ratings, reviews, freeOver }) {
   return safe({
     '@context': 'https://schema.org',
@@ -393,26 +365,6 @@ export function productGraph({ biz, settings, product, stock, ratings, reviews, 
         { name: product.name, path: `/shop/${product.slug}` },
       ]),
       productNode(product, stock, { ratings, reviews }),
-    ],
-  });
-}
-
-/** About / ingredients / wholesale / stockists. */
-export function pageGraph({ biz, settings, name, path, type = 'WebPage', crumbs = [] }) {
-  return safe({
-    '@context': 'https://schema.org',
-    '@graph': [
-      ...organisation(biz, settings),
-      breadcrumb([{ name: 'Home', path: '/' }, ...crumbs]),
-      {
-        '@type': type,
-        '@id': `${ORIGIN}${path}#webpage`,
-        url: ORIGIN + path,
-        name,
-        inLanguage: 'en-GB',
-        isPartOf: { '@id': `${ORIGIN}/#website` },
-        about: { '@id': ORG },
-      },
     ],
   });
 }

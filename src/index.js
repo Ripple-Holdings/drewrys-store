@@ -34,9 +34,8 @@ import { subscribe, enquiry, contact, listLeads, unsubscribe } from './leads.js'
 import { vatForOrder, vatReport, vatPeriods, vatSettings, sellingPrice } from './vat.js';
 import { recordHit, mirrorOrder, rollupAndPrune, dashboardData } from './reports.js';
 import { cleanPromo, normalisePromos, getPromoUses, incrementUses, evaluatePromos } from './promos.js';
-import { BIZ, shellPage, notFoundPage, shopPage, productPage, ingredientsPage,
-         aboutPage, wholesalePage, stockistsPage } from './pages.js';
-import { homeGraph, shopGraph, productGraph, pageGraph } from './schema.js';
+import { BIZ, shellPage, notFoundPage, productPage } from './pages.js';
+import { homeGraph, productGraph } from './schema.js';
 
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -207,13 +206,10 @@ async function renderSite(request, env) {
     + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
     + 'botanical oils. Free UK delivery over £40.';
 
-  /* The footer stays on the homepage. These open the product's own tile
-     rather than navigating away: ?product=<slug> is read on load and the
-     dialog opens, so the footer behaves like the rest of the one-page site.
-     The crawlable link to /shop/<slug> lives on the card's "Learn more"
-     instead, which is where a product link belongs anyway. */
+  /* Straight to each product's page, same destination as the card's "Learn
+     more". One product, one address, however you get there. */
   const productLinks = '<li class="fl-lh">THE RANGE</li>'
-    + live.map((p) => `<li><a href="/?product=${esc(p.slug)}#shop">${esc(p.name)}</a></li>`).join('');
+    + live.map((p) => `<li><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></li>`).join('');
 
   /* The grid, rendered server-side.
      The client rebuilds #grid from window.__DREWRYS__ the moment it boots, so
@@ -226,7 +222,7 @@ async function renderSite(request, env) {
   const gridHtml = live.map((p, i) => {
     const n = payload.stock[p.slug];
     const out = n !== null && n !== undefined && n <= 0;
-    return `<article class="card${out ? ' is-sold' : ''}" data-idx="${i}">`
+    return `<article class="card${out ? ' is-sold' : ''}" id="p-${esc(p.slug)}" data-idx="${i}">`
       + `<div class="shot">${out ? '<span class="tag tag--out">Sold out</span>'
           : (p.badge ? `<span class="tag">${esc(p.badge)}</span>` : '')}`
       + `<img class="pshot" src="${esc(p.image || '')}" alt="${esc(p.name)}" `
@@ -307,16 +303,6 @@ async function shopContext(env) {
   };
 }
 
-async function renderShop(env) {
-  const c = await shopContext(env);
-  return html(shopPage({
-    products: c.products,
-    stock: c.stock,
-    jsonld: shopGraph({ biz: BIZ, settings: c.settings, products: c.products,
-                        stock: c.stock, ratings: c.ratings, freeOver: c.freeOver }),
-  }));
-}
-
 async function renderProduct(env, slug) {
   const c = await shopContext(env);
   const product = c.products.find((p) => p.slug === slug);
@@ -339,29 +325,6 @@ async function renderProduct(env, slug) {
   }));
 }
 
-async function renderIngredients(env) {
-  const c = await shopContext(env);
-  return html(ingredientsPage({
-    ingredients: c.ingredients,
-    jsonld: pageGraph({ biz: BIZ, settings: c.settings, name: 'Ingredients',
-                        path: '/ingredients',
-                        crumbs: [{ name: 'Ingredients', path: '/ingredients' }] }),
-  }));
-}
-
-async function renderStatic(env, which) {
-  const settings = await getSettings(env);
-  const g = (name, path, type) => pageGraph({
-    biz: BIZ, settings, name, path, type, crumbs: [{ name, path }],
-  });
-  if (which === 'about') {
-    return html(aboutPage({ jsonld: g('Our story', '/about', 'AboutPage') }));
-  }
-  if (which === 'wholesale') {
-    return html(wholesalePage({ jsonld: g('Wholesale', '/wholesale') }));
-  }
-  return html(stockistsPage({ jsonld: g('Where to buy', '/stockists') }));
-}
 
 /* ── crawler plumbing: robots, sitemap, 404 ──────────────────────────────── */
 
@@ -443,12 +406,7 @@ async function sitemapXml(env) {
 
   const urls = [
     { loc: '/', priority: '1.0', freq: 'daily' },
-    { loc: '/shop', priority: '0.9', freq: 'daily' },
     ...live.map((p) => ({ loc: `/shop/${p.slug}`, priority: '0.8', freq: 'weekly' })),
-    { loc: '/about', priority: '0.7', freq: 'monthly' },
-    { loc: '/ingredients', priority: '0.7', freq: 'monthly' },
-    { loc: '/wholesale', priority: '0.7', freq: 'monthly' },
-    { loc: '/stockists', priority: '0.6', freq: 'monthly' },
     { loc: '/terms', priority: '0.3', freq: 'yearly' },
     { loc: '/returns', priority: '0.3', freq: 'yearly' },
     { loc: '/privacy', priority: '0.3', freq: 'yearly' },
@@ -1527,15 +1485,10 @@ async function route(request, env, ctx, url, path) {
       if (path === '/robots.txt') return robotsTxt();
       if (path === '/sitemap.xml') return sitemapXml(env);
 
-      // Real URLs for the things the one-page site could never rank for.
-      if (path === '/shop') return renderShop(env);
+      // A real page per product, for search engines only.
       if (path.startsWith('/shop/')) {
         return renderProduct(env, decodeURIComponent(path.slice(6)).replace(/\/+$/, ''));
       }
-      if (path === '/ingredients') return renderIngredients(env);
-      if (path === '/about') return renderStatic(env, 'about');
-      if (path === '/wholesale') return renderStatic(env, 'wholesale');
-      if (path === '/stockists') return renderStatic(env, 'stockists');
 
       if (path.startsWith('/review/share/')) return handleShare(env, path.slice(14));
       if (path.startsWith('/review/')) return handleReview(request, env, path.slice(8));
