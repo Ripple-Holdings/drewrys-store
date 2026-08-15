@@ -222,10 +222,10 @@ async function renderSite(request, env, openSlug = '') {
      for an abstract noun. */
   const title = opened
     ? `${esc(opened.name)}${opened.size ? ', ' + esc(opened.size) : ''} — ${esc(opened.tagline || '')} | Drewrys`
-    : 'Drewrys — barber-made hair clay, paste &amp; sea salt spray, made in the UK';
+    : 'Drewrys Haircare | Hair Clay, Paste &amp; Sea Salt Spray | Made in the UK';
   const desc = opened
     ? esc((opened.description || opened.tagline || '').slice(0, 155))
-    : 'Premium men’s haircare built by a barber with 15 years on the floor. '
+    : 'Premium men’s haircare built by a barber with 15 years of industry experience. '
       + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
       + 'botanical oils. Free UK delivery over £40.';
   const canonical = opened ? `https://${CANONICAL_HOST}/shop/${esc(opened.slug)}`
@@ -239,8 +239,10 @@ async function renderSite(request, env, openSlug = '') {
 
   /* Straight to each product's page, same destination as the card's "Learn
      more". One product, one address, however you get there. */
-  const productLinks = '<li class="fl-lh">THE RANGE</li>'
-    + live.map((p) => `<li><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></li>`).join('');
+  /* The heading moved into the footer's <summary> so the list can collapse on
+     mobile, so this emits the items only. */
+  const productLinks = live
+    .map((p) => `<li><a href="/shop/${esc(p.slug)}">${esc(p.name)}</a></li>`).join('');
 
   /* The grid, rendered server-side.
      The client rebuilds #grid from window.__DREWRYS__ the moment it boots, so
@@ -282,7 +284,7 @@ async function renderSite(request, env, openSlug = '') {
              `<meta name="twitter:image" content="${shareImg}">`)
     .replace('<meta property="og:title" content="Drewrys">',
              `<meta property="og:title" content="${opened ? esc(opened.name) + ' · Drewrys'
-                                                          : 'Drewrys — barber-made haircare, made in the UK'}">`)
+                                                          : 'Drewrys Haircare | Hair Clay, Paste &amp; Sea Salt Spray | Made in the UK'}">`)
     .replace('<div class="grid" id="grid"></div>', `<div class="grid" id="grid">${gridHtml}</div>`)
     .replace('<ul id="flProducts"></ul>', `<ul id="flProducts">${productLinks}</ul>`);
 
@@ -1489,6 +1491,28 @@ async function route(request, env, ctx, url, path) {
       // Crawler plumbing.
       if (path === '/robots.txt') return robotsTxt();
       if (path === '/sitemap.xml') return sitemapXml(env);
+
+      /* Google looks for a site icon in two places: the rel="icon" tag in the
+         head of the home page, and /favicon.ico at the root. The tag was
+         there and the root path was not, so one of the two lookups 404'd.
+         Serving the existing 128x128 PNG here covers both - a PNG under the
+         .ico name is fine, browsers and crawlers go by the content type. */
+      if (path === '/favicon.ico') {
+        if (env.ASSETS) {
+          const icon = await env.ASSETS.fetch(
+            new Request(new URL('/img/favicon.png', request.url), request),
+          );
+          if (icon.ok) {
+            return new Response(icon.body, {
+              headers: {
+                'Content-Type': 'image/png',
+                'Cache-Control': 'public, max-age=604800',
+              },
+            });
+          }
+        }
+        return new Response('', { status: 404 });
+      }
 
       // A real page per product, for search engines only.
       if (path.startsWith('/shop/')) {

@@ -350,7 +350,7 @@ export function homeGraph({ biz, settings, products, stock, ratings, freeOver })
         '@type': 'WebPage',
         '@id': `${ORIGIN}/#webpage`,
         url: ORIGIN + '/',
-        name: 'Drewrys — barber-made haircare, made in the UK',
+        name: 'Drewrys Haircare | Hair Clay, Paste & Sea Salt Spray | Made in the UK',
         inLanguage: 'en-GB',
         isPartOf: { '@id': `${ORIGIN}/#website` },
         about: { '@id': ORG },
