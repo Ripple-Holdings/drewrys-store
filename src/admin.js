@@ -279,9 +279,26 @@ td,th{text-align:left;padding:7px 6px;border-bottom:1px solid #f0e9dc}
 th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 /* Order card money summary. Right-aligned labels separate the totals from the
    item rows above without needing a second table. */
+/* Enquiry cards. Not a table - a message runs to 1200 characters and a table
+   cell either truncates it or blows the column widths apart. */
+.enq{border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:10px;
+  background:var(--cotton-2)}
+.enq--trade{border-left:3px solid var(--olive)}
+.enq-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.enq-h b{font-size:15px}
+.enq-k{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:3px 8px;border-radius:99px;background:var(--line);color:var(--muted)}
+.enq--trade .enq-k{background:var(--olive);color:#fff}
+.enq-d{font-size:12.5px;color:var(--muted)}
+.enq-r{font-size:11px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.enq-w{display:flex;gap:12px;flex-wrap:wrap;margin-top:5px;font-size:13px;color:var(--muted)}
+.enq-w a{color:var(--olive);text-decoration:underline}
+.enq-m{margin-top:9px;font-size:14px;line-height:1.55;white-space:pre-wrap}
+.enq-m--none{color:var(--muted);font-style:italic}
+@media(max-width:560px){ .enq-r{margin-left:0;width:100%} }
 tr.tot td{color:var(--muted)}
 tr.tot td:first-child{text-align:right}
-tr.tot-disc td{color:var(--peanut-deep)}
+tr.tot-disc td{color:var(--olive)}
 tr.tot-grand td{color:var(--ink);font-weight:700;border-bottom:0}
 tr.tot-grand td:first-child{text-transform:uppercase;font-size:11.5px;letter-spacing:.04em}
 
@@ -988,6 +1005,50 @@ function render(){
             esc(String(x.at||'').slice(0,10))+'</td></tr>';}).join('')+'</table>';
     }
     h+='</div></div>';
+
+    /* ENQUIRIES. listLeads has always returned {subscribers, enquiries} and the
+       enquiries half was fetched and then never rendered anywhere - a trade
+       enquiry was stored in KV for two years and reachable only through the
+       notification email, so deleting that email lost it. This is the viewer
+       that makes the WS-/MSG- reference in the email mean something. */
+    var ENQ=LD.enquiries||[];
+    var trade=ENQ.filter(function(x){return x.kind==='trade';});
+    var msgs=ENQ.filter(function(x){return x.kind!=='trade';});
+    h+='<div class="card open"><div class="head" style="cursor:default">'+
+      '<div class="hmeta"><b>Enquiries</b><span>'+
+        (ENQ.length? trade.length+' trade, '+msgs.length+' contact'
+                   : 'Nothing yet')+
+      '</span></div>'+
+      (ENQ.length?'<button type="button" class="ghost" data-csv="enq">Download CSV</button>':'')+
+      '</div><div class="body">';
+    if(!ENQ.length){
+      h+='<div class="note">The wholesale form and the contact form both write '+
+         'here, and both also email you. Kept for two years.</div>';
+    } else {
+      h+=ENQ.map(function(x){
+        var isTrade=x.kind==='trade';
+        // Reply goes to THEM, with the reference in the subject so a thread can
+        // be matched back to this record.
+        var subject=(isTrade?'Your trade enquiry':'Your message')+' - '+(x.id||'');
+        return '<div class="enq'+(isTrade?' enq--trade':'')+'">'+
+          '<div class="enq-h">'+
+            '<span class="enq-k">'+(isTrade?'Trade':'Contact')+'</span>'+
+            '<b>'+esc(x.business||x.name||'Someone')+'</b>'+
+            '<span class="enq-d">'+esc(String(x.at||'').slice(0,10))+'</span>'+
+            '<span class="enq-r">'+esc(x.id||'')+'</span>'+
+          '</div>'+
+          '<div class="enq-w">'+
+            (x.business&&x.name?'<span>'+esc(x.name)+'</span>':'')+
+            (x.type?'<span>'+esc(x.type)+'</span>':'')+
+            '<a href="mailto:'+esc(x.email)+'?subject='+encodeURIComponent(subject)+'">'+
+              esc(x.email)+'</a>'+
+          '</div>'+
+          (x.message?'<p class="enq-m">'+esc(x.message)+'</p>'
+                    :'<p class="enq-m enq-m--none">No message left.</p>')+
+        '</div>';
+      }).join('');
+    }
+    h+='</div></div>';
   }
 
   if(tab==='vat'){
@@ -1348,6 +1409,13 @@ document.addEventListener('click',function(e){
     if(t.dataset.csv==='subs'){
       name='drewrys-newsletter.csv';
       rows=[['email','signed up']].concat(LD.subscribers.map(function(x){return [x.email,x.at];}));
+    } else if(t.dataset.csv==='enq'){
+      name='drewrys-enquiries.csv';
+      rows=[['reference','kind','received','business','name','email','type','message']]
+        .concat((LD.enquiries||[]).map(function(x){
+          return [x.id, x.kind==='trade'?'Trade':'Contact', x.at, x.business||'',
+                  x.name||'', x.email||'', x.type||'', x.message||''];
+        }));
     } else { return; }
     var q=String.fromCharCode(34), CRLF=String.fromCharCode(13,10), BOM=String.fromCharCode(65279);
     var csv=rows.map(function(r){return r.map(function(c){

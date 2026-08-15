@@ -28,7 +28,7 @@ const clean = (v, n) => String(v ?? '').trim().slice(0, n);
  * finds, so a non-empty value is answered with a cheerful 200 and dropped -
  * telling a bot it failed only teaches it to try again.
  */
-export async function subscribe(request, env) {
+export async function subscribe(request, env, ctx, sendEmail) {
   if (!sameOrigin(request, env)) return json({ error: 'no' }, 403);
 
   let body = {};
@@ -45,12 +45,67 @@ export async function subscribe(request, env) {
   const existing = await env.DREWRYS_KV.get(key);
   if (existing) return json({ ok: true, already: true });     // idempotent, no duplicate
 
-  await env.DREWRYS_KV.put(key, JSON.stringify({
+  const record = {
     email, at: new Date().toISOString(),
     source: clean(body.source, 40) || 'footer',
-  }));
+  };
+  await env.DREWRYS_KV.put(key, JSON.stringify(record));
   console.log('newsletter signup', email);
+
+  /* Tell the shop. The signup was only ever written to KV, so a new subscriber
+     was invisible until somebody thought to open the Signups tab. Same
+     recipient chain and the same sendEmail the wholesale and contact forms use,
+     so it inherits whatever is already working rather than introducing a second
+     way of addressing mail.
+     ctx.waitUntil, so a slow or failing SendGrid call cannot hold up the
+     customer's response or lose the signup - the KV write is already done by
+     this point, and the list is the thing that matters.
+     NO email goes to the subscriber. That would be marketing mail and would
+     need an unsubscribe link to be lawful; this is an internal notification. */
+  const to = env.SHOP_ORDER_EMAIL || env.SHOP_CONTACT_EMAIL;
+  if (to && typeof sendEmail === 'function' && ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(sendEmail(env, {
+      to,
+      subject: 'New newsletter signup',
+      html: signupEmail(record),
+      // Reply goes to the subscriber, not to your own inbox.
+      replyTo: email,
+    }));
+  }
   return json({ ok: true });
+}
+
+/** Plain internal notification, styled to match the enquiry email. */
+function signupEmail(sub) {
+  const when = new Date(sub.at).toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London',
+  });
+  return `<!DOCTYPE html>
+<html><body style="margin:0;background:#F3EDE1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3EDE1;padding:28px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border-radius:14px;padding:28px 26px">
+        <tr><td>
+          <p style="margin:0 0 4px;color:#7a746b;font-size:13px;letter-spacing:.06em;text-transform:uppercase">Drewrys</p>
+          <h1 style="margin:0 0 18px;color:#191C21;font-size:21px;font-weight:600">New newsletter signup</h1>
+          <table role="presentation" cellpadding="0" cellspacing="0">
+            <tr><td style="padding:6px 14px 6px 0;color:#7a746b;font-size:14px;white-space:nowrap">Email</td>
+                <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(sub.email)}</td></tr>
+            <tr><td style="padding:6px 14px 6px 0;color:#7a746b;font-size:14px;white-space:nowrap">Signed up</td>
+                <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(when)}</td></tr>
+            <tr><td style="padding:6px 14px 6px 0;color:#7a746b;font-size:14px;white-space:nowrap">From</td>
+                <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(sub.source)}</td></tr>
+          </table>
+          <p style="margin:20px 0 0;color:#7a746b;font-size:13px;line-height:1.6">
+            They are on the list in the admin under Signups, where the full list
+            can be downloaded as a CSV. No email has been sent to them.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
 }
 
 /**

@@ -1540,7 +1540,11 @@ async function route(request, env, ctx, url, path) {
         return json({ ...cat, products: live, stock: await stockMap(env, live) });
       }
       if (path === '/create-session' && request.method === 'POST') return createSession(request, env);
-      if (path === '/api/subscribe' && request.method === 'POST') return subscribe(request, env);
+      if (path === '/api/subscribe' && request.method === 'POST') {
+        // ctx and sendEmail, same as the enquiry and contact routes - without
+        // them subscribe() silently skips the notification.
+        return subscribe(request, env, ctx, sendEmail);
+      }
       if (path === '/api/enquiry' && request.method === 'POST') {
         return enquiry(request, env, ctx, sendEmail);
       }
