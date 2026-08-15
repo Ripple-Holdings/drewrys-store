@@ -94,11 +94,9 @@ function signupEmail(sub) {
                 <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(sub.email)}</td></tr>
             <tr><td style="padding:6px 14px 6px 0;color:#7a746b;font-size:14px;white-space:nowrap">Signed up</td>
                 <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(when)}</td></tr>
-            <tr><td style="padding:6px 14px 6px 0;color:#7a746b;font-size:14px;white-space:nowrap">From</td>
-                <td style="padding:6px 0;color:#191C21;font-size:15px">${esc(sub.source)}</td></tr>
           </table>
           <p style="margin:20px 0 0;color:#7a746b;font-size:13px;line-height:1.6">
-            They are on the list in the admin under Signups, where the full list
+            They are on the list in the admin under Newsletter &amp; Trade, where it
             can be downloaded as a CSV. No email has been sent to them.
           </p>
         </td></tr>

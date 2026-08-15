@@ -286,9 +286,6 @@ th{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;
 .enq--trade{border-left:3px solid var(--olive)}
 .enq-h{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
 .enq-h b{font-size:15px}
-.enq-k{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-  padding:3px 8px;border-radius:99px;background:var(--line);color:var(--muted)}
-.enq--trade .enq-k{background:var(--olive);color:#fff}
 .enq-d{font-size:12.5px;color:var(--muted)}
 .enq-r{font-size:11px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
 .enq-w{display:flex;gap:12px;flex-wrap:wrap;margin-top:5px;font-size:13px;color:var(--muted)}
@@ -335,7 +332,7 @@ ${DASH_CSS}
   <button data-tab="orders" aria-selected="false">Orders</button>
   <button data-tab="vat" aria-selected="false">VAT</button>
   <button data-tab="reviews" aria-selected="false">Reviews</button>
-  <button data-tab="leads" aria-selected="false">Signups</button>
+  <button data-tab="leads" aria-selected="false">Newsletter &amp; Trade</button>
 </nav>
 <main id="main"></main>
 <div class="savebar" id="savebar" hidden><span class="sp" id="dirty"></span>
@@ -1006,49 +1003,59 @@ function render(){
     }
     h+='</div></div>';
 
-    /* ENQUIRIES. listLeads has always returned {subscribers, enquiries} and the
-       enquiries half was fetched and then never rendered anywhere - a trade
-       enquiry was stored in KV for two years and reachable only through the
-       notification email, so deleting that email lost it. This is the viewer
-       that makes the WS-/MSG- reference in the email mean something. */
+    /* TRADE and CONTACT, as two cards. listLeads has always returned
+       {subscribers, enquiries} and the enquiries half was fetched and then
+       never rendered anywhere - a trade enquiry was stored in KV for two years
+       and reachable only through the notification email, so deleting that email
+       lost it. This is the viewer that makes the WS-/MSG- reference in the
+       email mean something.
+       Split rather than one "Enquiries" list because a trade enquiry and a
+       customer question are different jobs: one is a sales lead worth chasing,
+       the other is a question to answer. Filing them together buried the
+       leads. */
     var ENQ=LD.enquiries||[];
-    var trade=ENQ.filter(function(x){return x.kind==='trade';});
-    var msgs=ENQ.filter(function(x){return x.kind!=='trade';});
-    h+='<div class="card open"><div class="head" style="cursor:default">'+
-      '<div class="hmeta"><b>Enquiries</b><span>'+
-        (ENQ.length? trade.length+' trade, '+msgs.length+' contact'
-                   : 'Nothing yet')+
-      '</span></div>'+
-      (ENQ.length?'<button type="button" class="ghost" data-csv="enq">Download CSV</button>':'')+
-      '</div><div class="body">';
-    if(!ENQ.length){
-      h+='<div class="note">The wholesale form and the contact form both write '+
-         'here, and both also email you. Kept for two years.</div>';
-    } else {
-      h+=ENQ.map(function(x){
-        var isTrade=x.kind==='trade';
-        // Reply goes to THEM, with the reference in the subject so a thread can
-        // be matched back to this record.
-        var subject=(isTrade?'Your trade enquiry':'Your message')+' - '+(x.id||'');
-        return '<div class="enq'+(isTrade?' enq--trade':'')+'">'+
-          '<div class="enq-h">'+
-            '<span class="enq-k">'+(isTrade?'Trade':'Contact')+'</span>'+
-            '<b>'+esc(x.business||x.name||'Someone')+'</b>'+
-            '<span class="enq-d">'+esc(String(x.at||'').slice(0,10))+'</span>'+
-            '<span class="enq-r">'+esc(x.id||'')+'</span>'+
-          '</div>'+
-          '<div class="enq-w">'+
-            (x.business&&x.name?'<span>'+esc(x.name)+'</span>':'')+
-            (x.type?'<span>'+esc(x.type)+'</span>':'')+
-            '<a href="mailto:'+esc(x.email)+'?subject='+encodeURIComponent(subject)+'">'+
-              esc(x.email)+'</a>'+
-          '</div>'+
-          (x.message?'<p class="enq-m">'+esc(x.message)+'</p>'
-                    :'<p class="enq-m enq-m--none">No message left.</p>')+
-        '</div>';
-      }).join('');
-    }
-    h+='</div></div>';
+    var enqCard=function(rows, title, blurb, csvKey, isTrade){
+      var out='<div class="card open"><div class="head" style="cursor:default">'+
+        '<div class="hmeta"><b>'+title+'</b><span>'+
+          (rows.length? rows.length+(rows.length===1?' received':' received')
+                      : 'Nothing yet')+
+        '</span></div>'+
+        (rows.length?'<button type="button" class="ghost" data-csv="'+csvKey+'">Download CSV</button>':'')+
+        '</div><div class="body">';
+      if(!rows.length){
+        out+='<div class="note">'+blurb+'</div>';
+      } else {
+        out+=rows.map(function(x){
+          // Reply goes to THEM, with the reference in the subject so a thread
+          // can be matched back to this record.
+          var subject=(isTrade?'Your trade enquiry':'Your message')+' - '+(x.id||'');
+          return '<div class="enq'+(isTrade?' enq--trade':'')+'">'+
+            '<div class="enq-h">'+
+              '<b>'+esc(x.business||x.name||'Someone')+'</b>'+
+              '<span class="enq-d">'+esc(String(x.at||'').slice(0,10))+'</span>'+
+              '<span class="enq-r">'+esc(x.id||'')+'</span>'+
+            '</div>'+
+            '<div class="enq-w">'+
+              (x.business&&x.name?'<span>'+esc(x.name)+'</span>':'')+
+              (x.type?'<span>'+esc(x.type)+'</span>':'')+
+              '<a href="mailto:'+esc(x.email)+'?subject='+encodeURIComponent(subject)+'">'+
+                esc(x.email)+'</a>'+
+            '</div>'+
+            (x.message?'<p class="enq-m">'+esc(x.message)+'</p>'
+                      :'<p class="enq-m enq-m--none">No message left.</p>')+
+          '</div>';
+        }).join('');
+      }
+      return out+'</div></div>';
+    };
+
+    h+=enqCard(ENQ.filter(function(x){return x.kind==='trade';}), 'Trade',
+      'Wholesale enquiries land here and also email you. Kept for two years.',
+      'trade', true);
+
+    h+=enqCard(ENQ.filter(function(x){return x.kind!=='trade';}), 'Contact',
+      'Messages from the contact form land here and also email you. Kept for two years.',
+      'contact', false);
   }
 
   if(tab==='vat'){
@@ -1409,12 +1416,20 @@ document.addEventListener('click',function(e){
     if(t.dataset.csv==='subs'){
       name='drewrys-newsletter.csv';
       rows=[['email','signed up']].concat(LD.subscribers.map(function(x){return [x.email,x.at];}));
-    } else if(t.dataset.csv==='enq'){
-      name='drewrys-enquiries.csv';
-      rows=[['reference','kind','received','business','name','email','type','message']]
-        .concat((LD.enquiries||[]).map(function(x){
-          return [x.id, x.kind==='trade'?'Trade':'Contact', x.at, x.business||'',
-                  x.name||'', x.email||'', x.type||'', x.message||''];
+    } else if(t.dataset.csv==='trade'||t.dataset.csv==='contact'){
+      var wantTrade=t.dataset.csv==='trade';
+      name='drewrys-'+(wantTrade?'trade':'contact')+'.csv';
+      var picked=(LD.enquiries||[]).filter(function(x){
+        return wantTrade ? x.kind==='trade' : x.kind!=='trade'; });
+      // Business and type are trade-only fields, so the contact export leaves
+      // out two columns that would be empty in every row.
+      rows=[wantTrade
+        ? ['reference','received','business','name','email','type','message']
+        : ['reference','received','name','email','message']]
+        .concat(picked.map(function(x){
+          return wantTrade
+            ? [x.id, x.at, x.business||'', x.name||'', x.email||'', x.type||'', x.message||'']
+            : [x.id, x.at, x.name||'', x.email||'', x.message||''];
         }));
     } else { return; }
     var q=String.fromCharCode(34), CRLF=String.fromCharCode(13,10), BOM=String.fromCharCode(65279);
