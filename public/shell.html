@@ -668,12 +668,16 @@ footer{position:relative;background:var(--ink);color:var(--cotton);padding-top:5
 .flb-by .by-word,.gbc-body,.tag-by{font-family:"Geist",system-ui,sans-serif;font-weight:650;text-transform:none}
 .flb-by{position:relative;top:0.210em}
 .fl-rise{transform:translateY(200px)}
-.fl-bot{display:flex;justify-content:space-between;gap:12px;padding:8px 0 14px;font-weight:500}
+.fl-bot{display:flex;justify-content:space-between;gap:12px;padding:22px 0 18px;font-weight:500}
 /* Created by Ripple. Sits INSIDE the legal row, after the copyright and a
    pipe, left aligned with it - deliberately quiet. This is an attribution, not
    a second brand competing with the client's own.
    --rp-size is the one place the mark's size is set. */
-.fl-copy{display:inline-flex;align-items:center;flex-wrap:wrap;gap:0}
+/* The mark stands taller than the type, so when the row wraps on a phone the
+   arcs reach up into the line above. A little extra leading on the wrapped
+   lines keeps them clear without changing the single-line desktop row. */
+.fl-copy{display:inline-flex;align-items:center;flex-wrap:wrap;gap:0;
+  row-gap:8px;line-height:1.7}
 /* The pipe and the credit wrap as ONE unit - loose, the pipe was left
    stranded at the end of the line when the footer stacked on a phone. */
 .fl-by{display:inline-flex;align-items:center;white-space:nowrap}
@@ -683,13 +687,15 @@ footer{position:relative;background:var(--ink);color:var(--cotton);padding-top:5
    gave an R barely half the height of the text beside it. --rp-size is set in
    em against 433/235 and then trimmed 15%, which puts the R at 0.855em against
    the type beside it, whatever size that type is. The translate is 22.6% of the
-   BOX height - recompute it if --rp-size changes, or the letter rides high. The nudge re-centres it, because the R sits
+   BOX height plus 0.1375em, which drops the R onto the text baseline rather
+   than centring its box - centred, the letter hung 2.2px below the baseline and
+   read as touching the type. Recompute if --rp-size changes. The nudge re-centres it, because the R sits
    low in the box and centring the BOX leaves the letter sitting low. */
 .fl-rp{--rp-size:1.577em;display:inline-flex;align-items:center;gap:5px;
   color:inherit;text-decoration:none;opacity:.72;transition:opacity .18s}
 .fl-rp:hover{opacity:1}
 .fl-rp .rp-mark{width:var(--rp-size);height:auto;display:block;flex:0 0 auto;
-  transform:translateY(-0.356em)}
+  transform:translateY(-0.4935em)}
 .fl-rp-t{font-weight:500}
 .fl-priv{color:var(--cotton);font-weight:650}
 #flToast{position:fixed;right:18px;bottom:18px;z-index:999;background:var(--cotton);color:var(--ink);padding:12px 18px;border-radius:12px;font-weight:600;box-shadow:0 18px 40px -12px rgba(0,0,0,.5)}
