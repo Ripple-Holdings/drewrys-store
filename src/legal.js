@@ -47,12 +47,18 @@ const f = (key) => {
 
 const updated = 'August 2026';
 
-function page(title, intro, body) {
+/* Exported so the guide pages can reuse this exact shell. They must not be a
+   second design that drifts from the legal pages and the shop.
+   opts.slug adds a self-referencing canonical; opts.updated=false drops the
+   "Last updated" line, which belongs on a policy and not on a guide. */
+export function page(title, intro, body, opts) {
+  const o = opts || {};
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} \u00b7 Drewrys</title>
 <link rel="icon" type="image/png" href="/img/favicon.png">
 <meta name="robots" content="index,follow">
+${o.slug ? `<link rel="canonical" href="https://drewrys.store/${o.slug}">` : ''}
 <link rel="stylesheet" href="/fonts-order.css">
 <style>
 :root{--cotton:#F3EDE1;--cotton-2:#ECE3D3;--ink:#191C21;--slate:#2B3037;
@@ -114,6 +120,7 @@ footer a:hover{text-decoration:underline}
   main{padding:30px 20px 70px}
   footer .in{gap:14px;padding:26px 20px}
 }
+${o.style || ''}
 </style></head><body>
 <div class="top"><div class="in">
   <a href="/" aria-label="Drewrys"><img src="/img/logo-d-white.png" alt="Drewrys"></a>
@@ -122,7 +129,7 @@ footer a:hover{text-decoration:underline}
 <main>
   <h1>${title}</h1>
   <p class="lede">${intro}</p>
-  <p class="meta">Last updated ${updated}</p>
+  ${o.updated === false ? '' : `<p class="meta">Last updated ${updated}</p>`}
   ${body}
 </main>
 <footer><div class="in">

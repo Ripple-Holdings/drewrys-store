@@ -27,6 +27,7 @@ import { REVIEW_DEFAULTS, livePlatforms, newToken, reviewId, queueReviewRequest,
 import { lookupPostcode } from './address.js';
 import { checkoutHtml } from './checkout.js';
 import { TERMS, RETURNS, PRIVACY } from './legal.js';
+import { ingredientsPage, helpPage } from './guides.js';
 import { orderConfirmationPage } from './confirmation.js';
 import { RETURN_REASONS, NO_RESTOCK_REASONS, reasonLabel, refundEmail,
          cancelledEmail } from './refunds.js';
@@ -358,6 +359,10 @@ function robotsTxt() {
 # The agents named individually below collect training data rather than
 # answer a live query, which is a different bargain. Content-Signal states
 # the same thing in one line.
+#
+# Google-Extended is deliberately NOT in that list. Google uses the one agent
+# name for both training and Gemini's live grounding, so blocking it costs us
+# Gemini entirely. Being read is worth more to a shop nobody has heard of.
 
 User-agent: *
 Content-Signal: search=yes,ai-train=no,use=reference
@@ -380,9 +385,6 @@ User-agent: CCBot
 Disallow: /
 
 User-agent: ClaudeBot
-Disallow: /
-
-User-agent: Google-Extended
 Disallow: /
 
 User-agent: GPTBot
@@ -414,6 +416,8 @@ async function sitemapXml(env) {
   const urls = [
     { loc: '/', priority: '1.0', freq: 'daily' },
     ...live.map((p) => ({ loc: `/shop/${p.slug}`, priority: '0.8', freq: 'weekly' })),
+    { loc: '/ingredients', priority: '0.7', freq: 'monthly' },
+    { loc: '/help', priority: '0.6', freq: 'monthly' },
     { loc: '/terms', priority: '0.3', freq: 'yearly' },
     { loc: '/returns', priority: '0.3', freq: 'yearly' },
     { loc: '/privacy', priority: '0.3', freq: 'yearly' },
@@ -1571,6 +1575,15 @@ async function route(request, env, ctx, url, path) {
                                     await getSettings(env)),
           { headers: { 'Content-Type': 'text/html;charset=utf-8',
                        'Cache-Control': 'no-store, must-revalidate' } });
+      }
+      /* Guide pages. Generated per request from the live ingredient library
+         and shipping settings, so an edit in /admin shows up here without a
+         deploy - and cannot contradict what the checkout charges. */
+      if (path === '/ingredients') {
+        return html(ingredientsPage(await getIngredients(env)));
+      }
+      if (path === '/help') {
+        return html(helpPage(await getSettings(env)));
       }
       if (path === '/terms') return html(TERMS);
       if (path === '/returns') return html(RETURNS);
