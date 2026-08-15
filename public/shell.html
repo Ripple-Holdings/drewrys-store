@@ -1743,8 +1743,14 @@ document.getElementById('wsForm').addEventListener('submit',async function(ev){
     const d=await r.json().catch(()=>({}));
     if(!r.ok||d.error){ say(d.error||'That did not send. Try again in a moment.',true);
       btn.disabled=false; btn.textContent=was; return; }
-    btn.textContent='Request sent'; btn.style.background='var(--cream)';
-    say('Thanks, we will come back to you within two working days.');
+    /* The form is reset and the button put back, because the dialog is now
+       what confirms it - leaving a dead "Request sent" button behind meant a
+       second enquiry could not be sent without a reload. */
+    ev.target.reset();
+    btn.disabled=false; btn.textContent=was; say('');
+    window.__done('Request sent.',
+      'Thanks for your interest in stocking Drewrys. We will come back to you '+
+      'within two working days with trade pricing and minimum order.');
   }catch(err){ say('That did not send. Try again in a moment.',true);
     btn.disabled=false; btn.textContent=was; }
 });
@@ -1773,6 +1779,24 @@ function initModals(){
     if(lastFocus&&lastFocus.focus) lastFocus.focus();
   }
   window.__openModal=openModal; window.__closeModal=closeModal;
+
+  /* One place that shows the confirmation, so contact and wholesale cannot
+     drift apart. If it is called while another modal is open - the contact
+     form lives inside one - that one is closed first, and the open is deferred
+     past the 260ms close transition so the scrim is not torn down underneath
+     the new dialog. */
+  window.__done=function(title,body){
+    var t=document.getElementById('mdTitle'), b=document.getElementById('mdBody');
+    if(t) t.textContent=title;
+    if(b) b.textContent=body;
+    var openNow=document.querySelector('.modal.open');
+    if(openNow&&openNow.id!=='mDone'){
+      closeModal(openNow);
+      setTimeout(function(){ openModal('mDone'); },280);
+    } else {
+      openModal('mDone');
+    }
+  };
 
   scrim.addEventListener('click',function(){ closeModal(); });
   document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeModal(); });
@@ -1826,8 +1850,10 @@ function initModals(){
       var d=await r2.json().catch(function(){return {};});
       if(!r2.ok||d.error){ say(d.error||'That did not send. Try again in a moment.',true);
         btn.disabled=false; btn.textContent=was; return; }
-      f.reset(); btn.textContent='Sent';
-      say('Thanks. We will come back to you within two working days.');
+      f.reset(); btn.disabled=false; btn.textContent=was; say('');
+      window.__done('Message sent.',
+        'Thanks for getting in touch. We will come back to you within two '+
+        'working days, to the email address you gave us.');
     }catch(err){ say('That did not send. Try again in a moment.',true);
       btn.disabled=false; btn.textContent=was; }
   });
@@ -2665,6 +2691,24 @@ let r=null, mounted=true;
         <button type="submit" class="msend" id="mcSend">Send</button>
         <p class="mnote" id="mcNote"></p>
       </form>
+    </div>
+  </div>
+</div>
+
+<!-- Reusable "we've got it" dialog. The newsletter had a proper confirmation
+     and the two forms did not - contact turned its button to "Sent" with a
+     small grey line underneath, wholesale to "Request sent", both easy to miss
+     on a phone. Same shell as the signup dialog on purpose: one confirmation
+     pattern across the site rather than a third design. Title and body are set
+     by whichever form opened it. -->
+<div class="modal" id="mDone" role="dialog" aria-modal="true" aria-labelledby="mdTitle" hidden>
+  <div class="mbox mbox--sm">
+    <div class="mmain" style="position:relative">
+      <button class="mclose" data-mclose aria-label="Close">&times;</button>
+      <div class="mtick"><svg viewBox="0 0 24 24"><path d="M4 12.5 9.5 18 20 6.5"/></svg></div>
+      <h2 id="mdTitle">Thanks.</h2>
+      <p class="msub" style="text-align:center" id="mdBody"></p>
+      <button type="button" class="msend" data-mclose>Close</button>
     </div>
   </div>
 </div>
