@@ -224,11 +224,18 @@ async function renderSite(request, env, openSlug = '') {
   const title = opened
     ? `${esc(opened.name)}${opened.size ? ', ' + esc(opened.size) : ''} — ${esc(opened.tagline || '')} | Drewrys`
     : 'Drewrys Haircare | Hair Clay, Paste &amp; Sea Salt Spray | Made in the UK';
-  const desc = opened
-    ? esc((opened.description || opened.tagline || '').slice(0, 155))
-    : 'Premium men’s haircare built by a barber with 15 years of industry experience. '
-      + 'Matte clay, paste, fibre, sea salt spray and shampoo, made in the UK with organic '
-      + 'botanical oils. Free UK delivery over £40.';
+  /* No apostrophe in this string, deliberately. A possessive here has to
+     survive a template literal, a string replace into an HTML attribute, and
+     whatever editor the file is next opened in - and a smart quote or an
+     escaped one showing up raw in the search result is the kind of fault
+     nobody notices for a week. Sidestepping it costs nothing.
+     esc() is applied to BOTH branches so a future edit that does type an
+     apostrophe is escaped exactly once, which is what an attribute needs. */
+  const desc = esc(opened
+    ? (opened.description || opened.tagline || '').slice(0, 155)
+    : 'Premium haircare for men, built by a barber with 15 years of industry '
+      + 'experience. Matte clay, paste, fibre, sea salt spray and shampoo, '
+      + 'made in the UK.');
   const canonical = opened ? `https://${CANONICAL_HOST}/shop/${esc(opened.slug)}`
                            : `https://${CANONICAL_HOST}/`;
   const shareImg = opened && opened.image ? `https://${CANONICAL_HOST}${esc(opened.image)}`
